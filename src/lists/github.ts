@@ -33,10 +33,19 @@ const RawContext = z.union([
     status: z.string(),
     conclusion: z.string().nullable(),
     startedAt: z.string().nullable(),
-    checkSuite: z.object({ createdAt: z.string() }).nullable(),
+    checkSuite: z
+      .object({
+        createdAt: z.string(),
+        workflowRun: z
+          .object({ workflow: z.object({ name: z.string() }) })
+          .nullable()
+          .optional(),
+      })
+      .nullable(),
   }),
   z.object({ kind: z.literal('StatusContext'), context: z.string(), state: z.string() }),
 ])
+type Context = z.infer<typeof RawContext>
 
 const NodeSchema = z.object({
   number: z.number().int().positive(),
@@ -118,7 +127,7 @@ const PULL_FIELDS = `number title url isDraft createdAt updatedAt headRefName ba
         reviewThreads(first: 100) { nodes { isResolved comments(first: 50) { nodes { createdAt body author { login kind: __typename } } } } }
         commits(last: 1) { nodes { commit { committedDate statusCheckRollup { contexts(first: 100) { nodes {
           kind: __typename
-          ... on CheckRun { name status conclusion startedAt checkSuite { createdAt } }
+          ... on CheckRun { name status conclusion startedAt checkSuite { createdAt workflowRun { workflow { name } } } }
           ... on StatusContext { context state }
         } } } } } }`
 
@@ -185,8 +194,30 @@ const FAILED_RUN = new Set(['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRE
 const SKIPPED_RUN = new Set(['SKIPPED', 'NEUTRAL', 'STALE'])
 const QUEUED_RUN = new Set(['QUEUED', 'WAITING', 'PENDING', 'REQUESTED'])
 
+/**
+ * The checks a PR's page shows: a workflow started twice on one commit (two pull_request events,
+ * say) leaves the first run's checks behind, often cancelled by the second, and those no longer
+ * count. Of the runs of one workflow's check, only the one from the newest suite stays.
+ */
+export function latestRuns(contexts: readonly Context[]): Context[] {
+  const keyOf = (c: Context) =>
+    c.kind === 'CheckRun' ? `${c.checkSuite?.workflowRun?.workflow.name ?? ''}\u0000${c.name}` : null
+  const suiteOf = (c: Context) => (c.kind === 'CheckRun' ? (c.checkSuite?.createdAt ?? '') : '')
+  const newest = new Map<string, Context>()
+  for (const c of contexts) {
+    const key = keyOf(c)
+    if (key === null) continue
+    const kept = newest.get(key)
+    if (kept === undefined || suiteOf(c) >= suiteOf(kept)) newest.set(key, c)
+  }
+  return contexts.filter(c => {
+    const key = keyOf(c)
+    return key === null || newest.get(key) === c
+  })
+}
+
 /** One check run or commit status as a check. */
-export function checkOf(context: z.infer<typeof RawContext>): Check {
+export function checkOf(context: Context): Check {
   if (context.kind === 'CheckRun') {
     const { conclusion } = context
     const status =
@@ -289,7 +320,7 @@ export function pullOf(n: Node, repo: Repo, viewer: string, kind: ListKind): Lis
       r.requestedReviewer?.login === undefined ? [] : [r.requestedReviewer.login]
     ),
     reviewers: reviewersOf(author, activity.reviews, activity.comments),
-    checks: (head?.statusCheckRollup?.contexts.nodes ?? []).map(checkOf),
+    checks: latestRuns(head?.statusCheckRollup?.contexts.nodes ?? []).map(checkOf),
     headCommittedAt: head?.committedDate ?? null,
     mergeable: n.mergeable === 'MERGEABLE' || n.mergeable === 'CONFLICTING' ? n.mergeable : 'UNKNOWN',
     canvasShas: canvasShasOf(activity.comments),

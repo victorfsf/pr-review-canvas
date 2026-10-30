@@ -4,6 +4,7 @@ import { createFakeGh } from '../testing/fakes.js'
 import {
   activityOf,
   checkOf,
+  latestRuns,
   fetchGithubList,
   fetchGithubPeople,
   fetchGithubPull,
@@ -68,6 +69,42 @@ describe('isBotAccount', () => {
     expect(isBotAccount({ login: 'renovate', kind: 'Bot' })).toBe(true)
     expect(isBotAccount({ login: 'dependabot[bot]' })).toBe(true)
     expect(isBotAccount({ login: 'ana', kind: 'User' })).toBe(false)
+  })
+})
+
+describe('latestRuns', () => {
+  const run = (name: string, conclusion: string, suite: string, workflow?: string) => ({
+    kind: 'CheckRun' as const,
+    name,
+    status: 'COMPLETED',
+    conclusion,
+    startedAt: null,
+    checkSuite: {
+      createdAt: suite,
+      workflowRun: workflow === undefined ? null : { workflow: { name: workflow } },
+    },
+  })
+
+  it('keeps only the newest run of a workflow started twice on the commit', () => {
+    const cancelled = run('Semgrep Scan', 'CANCELLED', '2026-10-30T17:22:42Z', 'SAST')
+    const rerun = run('Semgrep Scan', 'SUCCESS', '2026-10-30T17:22:43Z', 'SAST')
+    const skipped = run('E2E', 'SKIPPED', '2026-10-30T17:22:42Z', 'E2E')
+    expect(latestRuns([cancelled, skipped, rerun])).toEqual([skipped, rerun])
+    expect(latestRuns([rerun, cancelled])).toEqual([rerun])
+  })
+
+  it('keeps checks of the same name from other workflows, apps and commit statuses', () => {
+    const tests = run('build', 'SUCCESS', '2026-10-30T17:22:43Z', 'Tests')
+    const docs = run('build', 'FAILURE', '2026-10-30T17:22:42Z', 'Docs')
+    const app = run('build', 'SUCCESS', '2026-10-30T17:22:41Z')
+    const legacy = { kind: 'StatusContext' as const, context: 'build', state: 'SUCCESS' }
+    expect(latestRuns([tests, docs, app, legacy])).toEqual([tests, docs, app, legacy])
+  })
+
+  it('keeps the later of two runs in one suite, and one with no suite', () => {
+    const first = { ...run('lint', 'CANCELLED', '2026-10-30T17:00:00Z'), checkSuite: null }
+    const second = { ...first, conclusion: 'SUCCESS' }
+    expect(latestRuns([first, second])).toEqual([second])
   })
 })
 
