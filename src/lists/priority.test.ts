@@ -124,6 +124,7 @@ describe('queueContext', () => {
           pending: 1,
           waiting: 2,
           canvas: 'Ready',
+          points: { author: 2, reviewer: 1 },
         }),
         makeRow({ number: 6 }),
         makeRow({ number: 7, isDraft: true }),
@@ -139,6 +140,9 @@ describe('queueContext', () => {
     expect(text).toContain('- CI: failing, stuck: no checks started; merge conflict: yes')
     expect(text).toContain('- Comments waiting on you: 1; waiting on others: 2')
     expect(text).toContain('- Canvas: Ready')
+    expect(text).toContain('- Attention points still open: 3 (2 for the author, 1 for the reviewer)')
+    // A PR with no canvas has no count: unknown, not none.
+    expect(text).toContain('- Attention points still open: unknown, it has no canvas')
     expect(text).toContain('## #6: Change 6')
     expect(text).toContain('- Author: octo\n')
     expect(text).toContain('- Branches: feature-6 into main\n')

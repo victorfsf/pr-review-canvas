@@ -11,7 +11,8 @@
 //     own Claude Code settings never load and every tool that writes or runs commands is denied;
 //   - the prompt says the developer's words only rank PRs, and they cannot end their block early.
 //
-// The context holds the rows' facts (titles, labels, branches, counts), never comment text.
+// The context holds the rows' facts (titles, labels, branches, counts, open attention points), never
+// comment text.
 import { z } from 'zod'
 import { AppError } from '../server/errors.js'
 import type { ListRow } from './lists.js'
@@ -110,6 +111,10 @@ export function queueContext(slug: string, rows: readonly ListRow[], now: string
           `- CI: ${r.health.ci}${r.health.stuck === null ? '' : `, stuck: ${r.health.stuck}`}; merge conflict: ${r.health.conflict ? 'yes' : 'no'}`,
           `- Comments waiting on you: ${r.pending}; waiting on others: ${r.waiting}`,
           `- Canvas: ${r.canvas}`,
+          // Unknown, not zero, without a canvas: no one has looked for points on it yet.
+          r.points === undefined
+            ? '- Attention points still open: unknown, it has no canvas'
+            : `- Attention points still open: ${r.points.author + r.points.reviewer} (${r.points.author} for the author, ${r.points.reviewer} for the reviewer)`,
           '',
         ])),
   ].join('\n')
