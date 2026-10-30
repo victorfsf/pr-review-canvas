@@ -130,20 +130,24 @@ describe('openGenerateDialog', () => {
     ])
   })
 
-  it('starts the job from the dialog, polls it, and tells the table once it ends', async () => {
+  it('starts the job from the dialog, tells the table at once, polls it, and tells it again once it ends', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     polls = [job('generating'), job('done')]
     const ended = vi.fn()
-    await openGenerateDialog(document, 3, ended)
+    const started = vi.fn()
+    await openGenerateDialog(document, 3, ended, started)
     document
       .querySelector(`#${GENERATE_DIALOG_ID} [data-gen="start"]`)
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await settle()
     expect(calls).toContainEqual({ method: 'POST', url: `${BASE}api/prs/3/generate` })
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Preparing the diff')
+    // The row shows the job without waiting for a poll.
+    expect(started).toHaveBeenCalledTimes(1)
     expect(ended).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(GENERATION_POLL_MS)
     await settle()
+    expect(started).toHaveBeenCalledTimes(1)
     expect(ended).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(GENERATION_POLL_MS)
     await settle()

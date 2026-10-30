@@ -322,6 +322,33 @@ describe('saved groups', () => {
     expect(loadSearches(REPO).map(s => s.name)).toEqual(['Mine'])
   })
 
+  it('updates a group to who is ticked and deletes one, staying open through the confirmations', async () => {
+    saveSearches(REPO, [
+      { name: 'Mine', logins: ['cy'] },
+      { name: 'Old', logins: ['bob'] },
+    ])
+    const confirm = (/** @type {'ok' | 'cancel'} */ which) =>
+      /** @type {HTMLElement} */ (document.getElementById(`confirm-${which}`)).click()
+    await opened()
+    boxOf('bob').click()
+    buttonNamed('Update saved search Mine to the people picked').click()
+    // Clicks and Escape in the confirmation are the modal's: the panel stays open, sending nothing.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    confirm('cancel')
+    buttonNamed('Update saved search Mine to the people picked').click()
+    confirm('ok')
+    await flush()
+    expect(panel().hidden).toBe(false)
+    expect(posts()).toEqual([])
+    expect(loadSearches(REPO)[0]).toEqual({ name: 'Mine', logins: ['ana', 'bob'] })
+    expect(groups().map(g => g.textContent)).toEqual(['Mine ana, bob', 'Old bob'])
+    buttonNamed('Delete saved search Old').click()
+    confirm('ok')
+    await flush()
+    expect(panel().hidden).toBe(false)
+    expect(groups().map(g => g.textContent)).toEqual(['Mine ana, bob'])
+  })
+
   it('looks up each group’s people the first lookup did not list, when it listed as many as it can', async () => {
     directory = Array.from({ length: 100 }, (_, i) => ({ login: `p${String(i).padStart(3, '0')}` }))
     saveSearches(REPO, [{ name: 'Far', logins: ['zed', 'yan', 'p001'] }])

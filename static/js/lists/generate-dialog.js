@@ -18,12 +18,14 @@ export function resetGenerateDialogs() {
 }
 
 /**
- * Opens the generate dialog for PR `number`; `ended` hears when its job ends.
+ * Opens the generate dialog for PR `number`; `started` hears when its job starts, so the row can
+ * show it at once, and `ended` when it ends.
  * @param {Document} doc
  * @param {number} number
  * @param {() => void} ended
+ * @param {() => void} [started]
  */
-export async function openGenerateDialog(doc, number, ended) {
+export async function openGenerateDialog(doc, number, ended, started) {
   // The dialog calls the review routes under this project's base, as the review page does.
   setApiBase(projectBase())
   let generation = made.get(number)
@@ -33,7 +35,11 @@ export async function openGenerateDialog(doc, number, ended) {
     const root = doc.createElement('div')
     root.dataset['generateFor'] = String(number)
     doc.body.append(root)
-    generation = createGeneration(root, { prNumber: number, onEnded: () => ended() })
+    generation = createGeneration(root, {
+      prNumber: number,
+      onEnded: () => ended(),
+      onStarted: () => started?.(),
+    })
     made.set(number, generation)
   }
   const bundle = /** @type {import('../contract-types.js').PrBundle} */ (

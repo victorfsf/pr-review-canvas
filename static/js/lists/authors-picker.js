@@ -1,14 +1,16 @@
 // @ts-check
 // The Authors picker, on the Review queue, the Inbox and Settings, and as Reviewers on Pull
-// requests: saved searches at the top (one click applies one), then a searchable checkbox list of
-// the people on the page with their counts, and "Save as" to name the current pick. Everyone starts
-// ticked; several ticked shows anyone's ("Any of"), and none ticked shows nobody's. The saved
+// requests: saved searches at the top (one click applies one; each can be renamed, updated to the
+// current pick or deleted), then a searchable checkbox list of the people on the page with their
+// counts, and "Save as" to name the current pick, or to replace the search of that name. Everyone
+// starts ticked; several ticked shows anyone's ("Any of"), and none ticked shows nobody's. The saved
 // searches belong to the repo, so every picker offers the same ones. People given a `group` are
 // listed under its heading, in the order given, after those without one. Someone ticked who has no
 // rows now still shows, to untick.
 import { button, debounce, el, SEARCH_DEBOUNCE_MS, wireFilterPanel } from './dom.js'
 import { loadSearches, saveSearches, tick, ticked } from './filters.js'
 import { authorsLabel } from './queue.js'
+import { savedSearchRow } from './saved-search-row.js'
 
 /** @typedef {{ login: string, count: number, group?: string, text?: string }} Person */
 
@@ -50,7 +52,7 @@ export function wireAuthorsPicker(doc, opts) {
     get('authors-label').textContent = authorsLabel(picked, searches, name)
     get('saved-options').replaceChildren(
       ...[{ name: 'Everyone', logins: /** @type {string[] | null} */ (null) }, ...searches].map(s => {
-        const pick = button(doc, 'saved-search', '')
+        const pick = /** @type {HTMLButtonElement} */ (button(doc, 'saved-search', ''))
         const same =
           s.logins === null || picked === null
             ? s.logins === picked
@@ -58,9 +60,16 @@ export function wireAuthorsPicker(doc, opts) {
         pick.setAttribute('aria-pressed', String(same))
         pick.append(el(doc, 'strong', undefined, s.name))
         if (s.logins !== null && s.logins.length > 0)
-          pick.append(' ', el(doc, 'span', 'small muted', s.logins.map(name).join(', ')))
+          pick.append(' ', el(doc, 'span', 'small muted saved-logins', s.logins.map(name).join(', ')))
         pick.addEventListener('click', () => opts.pick(s.logins === null ? null : [...s.logins]))
-        return pick
+        // Everyone is no saved search: nothing to rename, update or delete.
+        if (s.logins === null) return pick
+        return savedSearchRow(doc, pick, {
+          repo: opts.repo,
+          search: { name: s.name, logins: s.logins },
+          picked,
+          changed: reread,
+        })
       })
     )
     const wanted = query.trim().toLowerCase()
@@ -97,6 +106,13 @@ export function wireAuthorsPicker(doc, opts) {
       picked === null ? 'Everyone' : picked.length === 0 ? 'Nobody' : `${picked.length} selected · Any of`
   }
 
+  /** The repo's searches as saved now: another picker, or a PR's Reviewers popup, may have changed them. */
+  const reread = () => {
+    searches = loadSearches(opts.repo)
+    render()
+  }
+  get('authors-button').addEventListener('click', reread)
+
   search.addEventListener(
     'input',
     debounce(() => {
@@ -108,7 +124,7 @@ export function wireAuthorsPicker(doc, opts) {
     const name = saveAs.value.trim()
     const picked = opts.picked()
     if (name === '' || picked === null || picked.length === 0) return
-    searches = [...searches.filter(s => s.name !== name), { name, logins: [...picked] }]
+    searches = [...loadSearches(opts.repo).filter(s => s.name !== name), { name, logins: [...picked] }]
     saveSearches(opts.repo, searches)
     saveAs.value = ''
     render()

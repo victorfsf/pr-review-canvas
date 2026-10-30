@@ -67,22 +67,6 @@ main.lists {
   margin-inline: auto;
 }
 
-.lists .canvas-running svg {
-  animation: canvas-spin 1.2s linear infinite;
-}
-
-@keyframes canvas-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lists .canvas-running svg {
-    animation: none;
-  }
-}
-
 .lists .canvas-action {
   text-decoration: none;
   white-space: nowrap;
@@ -1823,6 +1807,8 @@ main.lists {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* A fieldset is as wide as its widest line by default: this one takes its panel's width. */
+  min-inline-size: 0;
   margin: 0 0 6px;
   padding: 0;
   border: none;
@@ -3427,6 +3413,21 @@ main.lists {
   display: flex;
   align-items: center;
   gap: 4px;
+  padding-right: 4px;
+  border-radius: var(--r);
+}
+
+/* Hovered or applied, the whole row is lit, its actions too, not the search's button alone. */
+.lists .preset-row:hover {
+  background: var(--l-inset);
+}
+
+.lists .preset-row:has(> .saved-search[aria-pressed='true']) {
+  background: var(--l-accs);
+}
+
+.lists .preset-row > .saved-search:is(:hover, [aria-pressed='true']) {
+  background: none;
 }
 
 .lists .preset-row .saved-search {
@@ -3449,6 +3450,19 @@ main.lists {
 
 .lists .preset-row > button:not(.saved-search) {
   flex-shrink: 0;
+}
+
+/* A saved search of people: its name and people break onto more lines rather than widen the
+   popup, which never scrolls sideways. */
+.lists .people-row .saved-search {
+  flex-wrap: wrap;
+}
+
+.lists .people-row .saved-search > :is(strong, .saved-logins) {
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .lists .stack-label {

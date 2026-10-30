@@ -150,6 +150,18 @@ export const LISTS = {
     save: 'Save the filters on this page',
   },
 
+  /** A saved search's actions in the Authors and Reviewers pickers and the Reviewers popup. */
+  savedSearches: {
+    nameTaken: (/** @type {string} */ name) => `There is already a saved search named “${name}”.`,
+    pickFirst: 'Pick some people first',
+    alreadyCurrent: 'It has the people picked already',
+    updateToCurrent: 'Update it to the people picked',
+    updateConfirm: (/** @type {string} */ name) =>
+      `“${name}” will keep the people picked now in place of its own.`,
+    deleteConfirm: (/** @type {string} */ name) =>
+      `“${name}” will be deleted for good, from every picker. Who is picked stays as it is.`,
+  },
+
   /** The filter builder's modal: its conditions, blocks and Ask AI chat. */
   filterBuilder: {
     filling: 'AI is filling the builder…',

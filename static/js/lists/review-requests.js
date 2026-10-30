@@ -3,7 +3,7 @@
 // on one ticking all its people who can review (again, unticking them); then a searchable checkbox
 // list, those ticked first, then the project's people, those on the PR before the
 // rest, every one of them before anything is typed; then "Save as" to keep what is ticked as a
-// group. The groups are the repo's saved searches, so the Authors
+// group. Each group can be renamed, updated to who is ticked, or deleted. The groups are the repo's saved searches, so the Authors
 // pickers offer them too. Ticking sends nothing: closing the panel sends what changed, everyone in
 // one request, in the background, and the canvas's toast says when the forge has it, or why it
 // refused it.
@@ -13,6 +13,7 @@
 import { api } from './api.js'
 import { button, debounce, el, iconNode, SEARCH_DEBOUNCE_MS } from './dom.js'
 import { loadSearches, saveSearches } from './filters.js'
+import { savedSearchRow } from './saved-search-row.js'
 import { toast } from '../commands.js'
 import { TEXTS } from './texts.js'
 
@@ -45,14 +46,18 @@ export function reviewRequests(doc, repo, list) {
   let open = null
 
   doc.addEventListener('click', event => {
-    // A click that redrew what it hit, as a group or a box does, is inside: its target is gone.
+    // A click that redrew what it hit, as a group or a box does, is inside: its target is gone. So
+    // is one in a modal the panel opened, such as a saved group's rename or delete.
     if (open === null || !(event.target instanceof Node) || !event.target.isConnected) return
+    if (event.target instanceof Element && event.target.closest('dialog') !== null) return
     const found = kept.get(open)
     if (found === undefined || found.holds(event.target) || found.panel.contains(event.target)) return
     found.close()
   })
   doc.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && open !== null) kept.get(open)?.close(true)
+    // Escape in a modal over the panel closes the modal alone.
+    if (event.key === 'Escape' && open !== null && doc.querySelector('dialog[open]') === null)
+      kept.get(open)?.close(true)
   })
   // Fixed under its button, it follows the button when the page or a table scrolls.
   const follow = () => (open === null ? undefined : kept.get(open)?.place())
@@ -163,7 +168,7 @@ export function reviewRequests(doc, repo, list) {
               pick.title = all ? T.groupRemove : T.groupAdd
               pick.append(el(doc, 'strong', undefined, group.name))
               if (group.logins.length > 0)
-                pick.append(' ', el(doc, 'span', 'small muted', group.logins.join(', ')))
+                pick.append(' ', el(doc, 'span', 'small muted saved-logins', group.logins.join(', ')))
               pick.disabled = loading || members.length === 0
               pick.addEventListener('click', () => {
                 picked = all
@@ -171,7 +176,12 @@ export function reviewRequests(doc, repo, list) {
                   : [...picked, ...members.filter(l => !has(picked, l))]
                 render()
               })
-              return pick
+              return savedSearchRow(doc, /** @type {HTMLButtonElement} */ (pick), {
+                repo,
+                search: group,
+                picked,
+                changed: render,
+              })
             }))
       )
       const wanted = lower(search.value.trim().replace(/^@/, ''))

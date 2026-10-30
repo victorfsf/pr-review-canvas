@@ -6,7 +6,7 @@
 // button, in the same place whatever it does: Generate or Regenerate, which open the review
 // page's generate dialog for the PR; Stop while one runs; and Open once the canvas is ready, or
 // where no agent can run, which opens the canvas in a new tab. Each action loads the table again,
-// and a table with a generation under way keeps loading until it ends.
+// a started generation at once, and a table with a generation under way keeps loading until it ends.
 import { api } from './api.js'
 import { button, el, externalLink, iconNode } from './dom.js'
 import { openGenerateDialog } from './generate-dialog.js'
@@ -55,8 +55,7 @@ export const generating = row => row.generation?.state === 'running'
 export function canvasCell(doc, row) {
   const g = row.generation
   if (g?.state === 'running') {
-    const badge = el(doc, 'span', 'badge acc canvas-state canvas-running')
-    badge.append(iconNode(doc, 'rotateDot', 12), ' Generating')
+    const badge = el(doc, 'span', 'badge acc canvas-state canvas-running', 'Generating')
     badge.title = `${PHASE_WORDS[g.phase] ?? 'Generating'}, since ${new Date(g.startedAt).toLocaleTimeString()}`
     return badge
   }
@@ -142,7 +141,12 @@ export function canvasAction(doc, row) {
   go.title = stale ? 'Generate a canvas for its head commit' : 'Generate its canvas'
   go.setAttribute('aria-label', `${go.title}: #${row.number}`)
   go.addEventListener('click', () => {
-    void openGenerateDialog(doc, row.number, () => reload(doc)).catch(err => {
+    void openGenerateDialog(
+      doc,
+      row.number,
+      () => reload(doc),
+      () => reload(doc)
+    ).catch(err => {
       go.title = `Could not open the dialog: ${err instanceof Error ? err.message : String(err)}`
       go.classList.add('bad')
     })

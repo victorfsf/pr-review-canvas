@@ -339,6 +339,7 @@ function showDialog(dialog) {
  * @param {{
  *   prNumber: ReviewKey,
  *   onEnded: (job: GenerationJob) => void | Promise<void>,
+ *   onStarted?: (job: GenerationJob) => void,
  *   onError?: (message: string) => void,
  *   fetchImpl?: typeof fetch,
  *   now?: () => Date,
@@ -432,6 +433,8 @@ export function createGeneration(root, opts) {
       drawDialog()
     }
     if (job !== null && isRunning(job)) {
+      // A job this page sees start, or sees for the first time, is news to it too.
+      if (!watching) opts.onStarted?.(job)
       watching = true
     } else if (job !== null && watching) {
       watching = false

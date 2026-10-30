@@ -3,7 +3,7 @@
 import { listsMain, projectTabs } from '../../../src/server/lists-html.ts'
 import { SEARCH_DEBOUNCE_MS, SYNCING_RELOAD_MS } from './dom.js'
 import { SEARCH_DELAY_MS } from './search.js'
-import { flushSavedFilters, loadPresets, loadSearches, resetSavedFilters } from './filters.js'
+import { flushSavedFilters, loadPresets, loadSearches, resetSavedFilters, saveSearches } from './filters.js'
 import { resetGenerateDialogs } from './generate-dialog.js'
 import { DEFAULT_PRIORITY_PROMPT } from './priority.js'
 import { pendingBadge, wireQueuePage } from './queue-page.js'
@@ -571,6 +571,23 @@ describe('the Review queue', () => {
     )
     squad.click()
     expect(page.numbers()).toEqual(['#512', '#505'])
+    // Everyone is no saved search; Squad has its actions, Delete among them.
+    const options = page.get('saved-options')
+    expect(options.querySelectorAll('.preset-row')).toHaveLength(1)
+    ;/** @type {HTMLButtonElement} */ (
+      options.querySelector('[aria-label="Delete saved search Squad"]')
+    ).click()
+    ;/** @type {HTMLButtonElement} */ (document.getElementById('confirm-ok')).click()
+    await flush()
+    expect(loadSearches(REPO)).toEqual([])
+    expect(options.querySelectorAll('.saved-search')).toHaveLength(1)
+    // A search saved elsewhere, such as in a PR's Reviewers popup, shows once the picker opens.
+    saveSearches(REPO, [{ name: 'Pair', logins: ['bob'] }])
+    page.click('authors-button')
+    expect([...options.querySelectorAll('.saved-search strong')].map(s => s.textContent)).toEqual([
+      'Everyone',
+      'Pair',
+    ])
   })
 
   it('saves the filters by name, searches them, applies one at a time, and deletes one', async () => {

@@ -103,7 +103,8 @@ describe('canvasCell', () => {
       'Generating',
       `Checking out the head, since ${since}`,
     ])
-    expect(cell.querySelector('svg')).not.toBeNull()
+    // Just the status: no icon to spin.
+    expect(cell.querySelector('svg')).toBeNull()
     // A phase the cell does not name reads as Generating.
     const other = canvasCell(document, {
       number: 4,
@@ -304,19 +305,22 @@ describe('canvasAction', () => {
     expect(reloads).toBe(0)
   })
 
-  it('opens the generate dialog on Generate, whose end loads the table again', async () => {
+  it('opens the generate dialog on Generate, whose start and end load the table again', async () => {
     page()
     const go = /** @type {HTMLButtonElement} */ (canvasAction(document, { number: 3, canvas: 'Pending' }))
     go.click()
     await flush()
     expect(openGenerateDialog).toHaveBeenCalledTimes(1)
-    const [doc, number, ended] = vi.mocked(openGenerateDialog).mock.calls[0] ?? []
+    const [doc, number, ended, started] = vi.mocked(openGenerateDialog).mock.calls[0] ?? []
     expect([doc, number]).toEqual([document, 3])
     // The table asks nothing of the server itself; the dialog starts the job.
     expect(requests).toEqual([])
     expect(reloads).toBe(0)
-    ended?.()
+    // The row shows the job as soon as it starts, not at the next reload.
+    started?.()
     expect(reloads).toBe(1)
+    ended?.()
+    expect(reloads).toBe(2)
     expect(go.classList.contains('bad')).toBe(false)
   })
 
