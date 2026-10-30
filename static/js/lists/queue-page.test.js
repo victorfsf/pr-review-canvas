@@ -1313,6 +1313,18 @@ describe('the Review queue', () => {
       expect(document.querySelector('#queue-priority-table [id^="pr-"]')).toBeNull()
     })
 
+    it('gives a PR shown in Highest priority and its table a Reviewers button in each row', async () => {
+      answer = { ...answer, priority: PRIORITY }
+      history.replaceState(null, '', `/r/acme/widgets/queue?${AWAITING}`)
+      await load()
+      const reviewers = (/** @type {string} */ table) =>
+        [...document.querySelectorAll(`${table} .queue-row`)]
+          .filter(r => r.querySelector('.pull-number')?.textContent === '#512')
+          .map(r => r.querySelector('.review-open')?.getAttribute('aria-label'))
+      expect(reviewers('#queue-priority-table')).toEqual([expect.stringContaining('512')])
+      expect(reviewers('#queue-table')).toEqual([expect.stringContaining('512')])
+    })
+
     it('says what to do before the first sync, while it runs, when the prompt changed and when it failed', async () => {
       answer = { ...answer, priority: { ...PRIORITY, syncedAt: null, picks: [], count: 3 } }
       let page = await load()

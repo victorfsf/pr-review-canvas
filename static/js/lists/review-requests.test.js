@@ -145,10 +145,11 @@ const typeIn = async value => {
 }
 
 describe('the Reviewers button', () => {
-  it('is one button per PR, the same across redraws, with its panel out of the page until opened', () => {
+  it('makes a button for each row a PR shows on, with its panel out of the page until opened', () => {
     const requests = reviewRequests(document, REPO, 'pulls')
     const anchor = requests.button(7)
-    expect(requests.button(7)).toBe(anchor)
+    // Highest priority and the table each show the PR: each row has a button of its own.
+    expect(requests.button(7)).not.toBe(anchor)
     expect(requests.button(8)).not.toBe(anchor)
     const toggle = /** @type {HTMLButtonElement} */ (anchor.querySelector('button.review-open'))
     expect([
@@ -577,17 +578,22 @@ describe('placing the panel', () => {
     expect(bare.querySelector('.review-panel')).toBeNull()
   })
 
-  it('follows its button across a redraw, and closes once its row is gone', async () => {
+  it('moves under a button of the PR still on the page after a redraw, and closes once none is', async () => {
     const { requests, anchor } = await opened()
     boxOf('bob').click()
-    // A redraw puts the same button in the new row.
+    // A redraw draws new rows, each with a new button of the PR.
     const row = document.createElement('td')
     document.querySelector('tr')?.append(row)
-    expect(requests.button(7)).toBe(anchor)
-    row.append(anchor)
+    const redrawn = requests.button(7)
+    row.append(redrawn)
+    anchor.remove()
     requests.drawn()
     expect(panel().hidden).toBe(false)
-    anchor.remove()
+    expect(redrawn.querySelector('button')?.getAttribute('aria-expanded')).toBe('true')
+    // Its button still on the page, the panel stays under it.
+    requests.drawn()
+    expect(panel().hidden).toBe(false)
+    redrawn.remove()
     requests.drawn()
     expect(panel()).toBeNull()
     await flush()
@@ -596,6 +602,30 @@ describe('placing the panel', () => {
     requests.drawn()
     window.dispatchEvent(new Event('scroll'))
     expect(posts()).toHaveLength(1)
+  })
+})
+
+describe('a PR shown on two rows', () => {
+  it('opens its one panel from either button, and the other button moves it there', async () => {
+    const requests = reviewRequests(document, REPO, 'queue')
+    const first = requests.button(7)
+    const second = requests.button(7)
+    const row = document.createElement('tr')
+    row.append(first, second)
+    document.querySelector('main')?.append(row)
+    const [a, b] = [first, second].map(x => /** @type {HTMLButtonElement} */ (x.querySelector('button')))
+    a?.click()
+    await flush()
+    expect(document.querySelectorAll('.review-panel')).toHaveLength(1)
+    expect([a?.getAttribute('aria-expanded'), b?.getAttribute('aria-expanded')]).toEqual(['true', 'false'])
+    // The other row's button closes it there, and opens it under itself.
+    b?.click()
+    await flush()
+    expect(document.querySelectorAll('.review-panel')).toHaveLength(1)
+    expect([a?.getAttribute('aria-expanded'), b?.getAttribute('aria-expanded')]).toEqual(['false', 'true'])
+    // The same button again closes it.
+    b?.click()
+    expect(document.querySelector('.review-panel')).toBeNull()
   })
 })
 

@@ -39,7 +39,7 @@ const LISTED = 100
  * @param {'pulls' | 'queue'} list
  */
 export function reviewRequests(doc, repo, list) {
-  /** @type {Map<number, { anchor: HTMLElement, panel: HTMLElement, close: (refocus?: boolean) => void, place: () => void }>} */
+  /** @type {Map<number, ReturnType<typeof make>>} */
   const kept = new Map()
   /** The PR whose panel is open. @type {number | null} */
   let open = null
@@ -48,8 +48,7 @@ export function reviewRequests(doc, repo, list) {
     // A click that redrew what it hit, as a group or a box does, is inside: its target is gone.
     if (open === null || !(event.target instanceof Node) || !event.target.isConnected) return
     const found = kept.get(open)
-    if (found === undefined || found.anchor.contains(event.target) || found.panel.contains(event.target))
-      return
+    if (found === undefined || found.holds(event.target) || found.panel.contains(event.target)) return
     found.close()
   })
   doc.addEventListener('keydown', event => {
@@ -68,16 +67,10 @@ export function reviewRequests(doc, repo, list) {
     const T = TEXTS.pr.reviewRequests
     const base = `lists/${list}/${number}`
     const id = (/** @type {string} */ name) => `review-${number}-${name}`
-    const anchor = el(doc, 'span', 'review-anchor')
-    const toggle = /** @type {HTMLButtonElement} */ (
-      button(doc, 'icon-button small-icon-button review-open', '')
-    )
-    toggle.append(iconNode(doc, 'userPlus', 16))
-    toggle.title = T.button
-    toggle.setAttribute('aria-label', T.buttonFor(number))
-    toggle.setAttribute('aria-haspopup', 'dialog')
-    toggle.setAttribute('aria-expanded', 'false')
-    anchor.append(toggle)
+    /** Every button made for the PR, one per row it shows on, a table's and Highest priority's. */
+    const toggles = /** @type {HTMLButtonElement[]} */ ([])
+    /** The button the panel opened from, which it sits under. */
+    let toggle = /** @type {HTMLButtonElement | null} */ (null)
 
     const panel = el(doc, 'section', 'popover authors-panel review-panel')
     panel.setAttribute('role', 'dialog')
@@ -307,9 +300,8 @@ export function reviewRequests(doc, repo, list) {
 
     /** Shows on the button that the forge has not answered yet, or that it has. */
     const busy = (/** @type {boolean} */ on) => {
-      toggle.classList.toggle('sending', on)
-      toggle.setAttribute('aria-busy', String(on))
-      toggle.title = on ? T.sending : T.button
+      busyNow = on
+      for (const t of toggles) paint(t)
     }
 
     /**
@@ -357,6 +349,7 @@ export function reviewRequests(doc, repo, list) {
       if (view === null || panel.hidden) return
       // The text size zooms the page: places come zoomed, and the ones set are zoomed again.
       const zoom = Number(view.getComputedStyle(doc.documentElement).getPropertyValue('--zoom')) || 1
+      if (toggle === null) return
       const box = toggle.getBoundingClientRect()
       const [right, top, bottom] = [box.right / zoom, box.top / zoom, box.bottom / zoom]
       const [wide, high] = [view.innerWidth / zoom, view.innerHeight / zoom]
@@ -373,22 +366,34 @@ export function reviewRequests(doc, repo, list) {
       if (panel.hidden) return
       panel.hidden = true
       panel.remove()
-      toggle.setAttribute('aria-expanded', 'false')
+      toggle?.setAttribute('aria-expanded', 'false')
       if (open === number) open = null
-      if (refocus) toggle.focus()
+      if (refocus) toggle?.focus()
       const { add, remove } = diff()
       if (add.length > 0 || remove.length > 0) send(add, remove)
     }
 
-    toggle.addEventListener('click', async () => {
+    /** Whether a send is on its way, which every button of the PR shows. */
+    let busyNow = false
+    /** @param {HTMLButtonElement} t */
+    const paint = t => {
+      t.classList.toggle('sending', busyNow)
+      t.setAttribute('aria-busy', String(busyNow))
+      t.title = busyNow ? T.sending : T.button
+    }
+
+    /** Opens the panel under `from`, or closes it when it is open under any of the PR's buttons. */
+    const opened = async (/** @type {HTMLButtonElement} */ from) => {
       if (!panel.hidden) {
+        const again = toggle === from
         close()
-        return
+        if (again) return
       }
       if (open !== null) kept.get(open)?.close()
       open = number
       ;(doc.querySelector('main.lists') ?? doc.body).append(panel)
       panel.hidden = false
+      toggle = from
       toggle.setAttribute('aria-expanded', 'true')
       search.value = ''
       // While a send is on its way, who it asks is what was sent; else the forge's, as last read.
@@ -410,27 +415,68 @@ export function reviewRequests(doc, repo, list) {
       search.focus()
       await lookup()
       await confirmGroups()
-    })
-    return { anchor, panel, close, place }
+    }
+
+    /** A new button for one row: it opens the PR's panel. */
+    const newButton = () => {
+      const anchor = el(doc, 'span', 'review-anchor')
+      const t = /** @type {HTMLButtonElement} */ (
+        button(doc, 'icon-button small-icon-button review-open', '')
+      )
+      t.append(iconNode(doc, 'userPlus', 16))
+      t.setAttribute('aria-label', T.buttonFor(number))
+      t.setAttribute('aria-haspopup', 'dialog')
+      t.setAttribute('aria-expanded', 'false')
+      paint(t)
+      t.addEventListener('click', () => void opened(t))
+      anchor.append(t)
+      toggles.push(t)
+      return anchor
+    }
+
+    /** After a redraw: forgets the buttons gone, and the open panel moves under one still on the page, or closes. */
+    const settle = () => {
+      // A table draws its rows before it puts them on the page: only now can the buttons a redraw
+      // left behind be told apart and forgotten.
+      for (let i = toggles.length - 1; i >= 0; i--) if (!toggles[i]?.isConnected) toggles.splice(i, 1)
+      if (panel.hidden) return
+      if (toggle !== null && toggle.isConnected) {
+        place()
+        return
+      }
+      const still = toggles.find(t => t.isConnected)
+      if (still === undefined) {
+        close()
+        return
+      }
+      toggle = still
+      toggle.setAttribute('aria-expanded', 'true')
+      place()
+    }
+    return {
+      newButton,
+      panel,
+      close,
+      place,
+      settle,
+      holds: (/** @type {Node} */ node) => toggles.some(t => t.contains(node)),
+    }
   }
 
   return {
     /**
-     * The button that opens PR `number`'s panel: the same one each time, so a redraw keeps it.
+     * A button that opens PR `number`'s panel, for one row: a PR shown twice, in Highest priority
+     * and its table, has one in each, both opening the same panel.
      * @param {number} number
      */
     button(number) {
       const found = kept.get(number) ?? make(number)
       kept.set(number, found)
-      return found.anchor
+      return found.newButton()
     },
-    /** Call after each redraw: the open panel follows its button, or closes once its row is gone. */
+    /** Call after each redraw: the open panel follows its button, or closes once its rows are gone. */
     drawn() {
-      if (open === null) return
-      const found = kept.get(open)
-      if (found === undefined) return
-      if (found.anchor.isConnected) found.place()
-      else found.close()
+      for (const found of kept.values()) found.settle()
     },
   }
 }

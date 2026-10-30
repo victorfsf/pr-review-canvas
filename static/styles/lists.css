@@ -2891,6 +2891,39 @@ main.lists {
   text-align: right;
 }
 
+/* Each column the same width in every table, so they line up; Pull request takes the rest. */
+.lists .queue-grid thead th[data-col='status'] {
+  width: 96px;
+}
+
+.lists .queue-grid thead th[data-col='pending'] {
+  width: 88px;
+}
+
+.lists .queue-grid thead th:is([data-col='points'], [data-col='review']) {
+  width: 112px;
+}
+
+.lists .queue-grid thead th[data-col='reviewed'] {
+  width: 128px;
+}
+
+.lists .queue-grid thead th[data-col='author'] {
+  width: 120px;
+}
+
+.lists .queue-grid thead th[data-col='ready'] {
+  width: 72px;
+}
+
+.lists .queue-grid thead th[data-col='labels'] {
+  width: 140px;
+}
+
+.lists .queue-grid thead th[data-col='canvas'] {
+  width: 96px;
+}
+
 .lists .queue-grid td {
   padding: 9px 10px;
   border-bottom: 1px solid var(--l-bd2);
