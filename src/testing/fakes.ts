@@ -26,6 +26,9 @@ import {
   type VendorRoots,
 } from '../server/context.js'
 import { createFakeRunner } from './fake-runner.js'
+import { canvasFactsOf } from '../lists/canvas-status.js'
+import { createListsSet } from '../lists/set.js'
+import type { ListFetcher } from '../lists/model.js'
 
 export interface FakeGitOptions {
   refs?: Record<string, string>
@@ -408,6 +411,8 @@ export interface TestContextOptions {
   fixtureArtifact?: ReviewArtifact | null
   projectConfig?: LoadedProjectConfig
   runner?: AgentRunner
+  /** The forge reads behind Your PRs and the Review queue; the fake `gh` answers them when omitted. */
+  listsFetcher?: ListFetcher
   /** The git behind review checkouts; a fake that makes folders by default. */
   checkoutGit?: CheckoutGit
   /** `serve --agent/--model` for this context. */
@@ -481,7 +486,7 @@ export async function makeTestContext(opts: TestContextOptions = {}): Promise<Te
   const gh = opts.gh ?? createFakeGh()
   const stores = createStores(dataDir, config, git, now)
   const clone = opts.clone ?? createCloneShared(config, now, opts.checkoutGit ?? createFakeCheckoutGit())
-  const parts: Omit<AppContext, 'generation'> = {
+  const parts: Omit<AppContext, 'generation' | 'lists'> = {
     log: () => undefined,
     clone,
     config,
@@ -516,6 +521,17 @@ export async function makeTestContext(opts: TestContextOptions = {}): Promise<Te
   const ctx: AppContext = {
     ...parts,
     generation: createContextGeneration(parts, clone.generationLane, () => ctx),
+    lists: createListsSet({
+      config: parts.config,
+      gh: parts.gh,
+      runner: parts.runner,
+      chatSettings: () => ctx.chat.effectiveSettings(),
+      canvasFacts: pull => canvasFactsOf(ctx, pull),
+      generation: () => ctx.generation,
+      now: parts.now,
+      log: parts.log,
+      ...(opts.listsFetcher === undefined ? {} : { fetcher: opts.listsFetcher }),
+    }),
   }
   // A data dir the caller shares belongs to the caller, who removes it once.
   const cleanup =

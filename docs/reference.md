@@ -543,6 +543,68 @@ Test recognition controls ordering, but matching a test to its source file curre
 `.test`, `.spec`, and `__tests__` naming. With other conventions, validation may miss a test
 placed in Other while its source is in a regular layer.
 
+## Your PRs and the Review queue
+
+Beside the project's **Home** tab at `/r/<owner>/<repo>/`, two tabs list open pull requests (merge
+requests on GitLab): **Your PRs** at `/r/<owner>/<repo>/pulls` and the **Review queue** at
+`/r/<owner>/<repo>/queue`. Each list is read
+from the forge through `gh` or `glab` when a tab first opens, again behind the page when the last read is
+more than two minutes old, and at once with the sync button beside the tabs. An open tab loads again
+every minute while it is in view.
+
+| Column           | What it shows                                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status           | The head commit's checks (failing, running, stuck, passing) and a merge conflict; on the queue, a request for your review by name                                                                                                 |
+| Pending          | Your PRs: unresolved threads whose last comment is not yours, standing change requests, comments after your last word, failing or stuck CI, a conflict. The queue: what names you since you last wrote, then what waits on others |
+| Attention points | The canvas's attention points still open for you: not resolved by the author, not posted or in your pending review, not dismissed. A dash while the canvas is not on this machine; opening the PR imports a shared one            |
+| Review           | Your PRs: approved, changes requested, or review required                                                                                                                                                                         |
+| Reviewed by      | Who approved, requested changes or commented; comments posted from the canvas and from bots each count as one entry                                                                                                               |
+| Author           | The queue's PR author                                                                                                                                                                                                             |
+| Ready            | How long since the PR left draft, or since it entered GitHub's merge queue                                                                                                                                                        |
+| Labels           | Its labels                                                                                                                                                                                                                        |
+| Canvas           | **Ready** when a canvas stands for the head commit (shared for it, or here, carried over when the diff is identical); **Stale** when canvases exist only for other commits; **Pending** with none; **Generating** while one runs  |
+
+On GitLab, approvals stand for reviews, resolvable discussions for threads, and the head pipeline's
+jobs for checks; a job allowed to fail never fails the merge request.
+
+Each row's **Reviewers** button opens who the PR asks to review it: saved groups, then the
+project's people (GitHub's assignable users, or the GitLab project's members), those on the PR
+first. Ticking sends nothing; closing the popup asks and stops asking, in one go, on the forge,
+then reads the PR again. The Authors and Reviewers filters offer the same people, those with no
+PR in the list too; they are read with a list at most once an hour.
+
+Each row's sync button, beside its action, reads that PR alone from the forge again and puts it in
+place, or takes it out once it is no longer open; the rest of the list stays as last read.
+
+Each row's **Actions** button follows its canvas: **Generate** while it has none, **Regenerate**
+while it is stale, both opening the review page's generate dialog for the PR; **Stop** while a
+generation runs; and **Open**, in a new tab, once the canvas is ready or where no agent can run.
+One generation runs at a time across a clone, as from the review page. The Canvas badge says
+**Generating** while one runs, with its phase in the tooltip, and turns red with the reason when
+the last one failed.
+
+**Sections** groups each table by label: a PR goes in the first section with any of its labels, and
+the last section takes the rest. **Base branches** are `main` until others are saved, from **Base
+branches** beside the tables; a PR based on any other branch is stacked and shows its place, such as 2/3, which filters
+the table to that stack.
+
+**Highest priority** and the builder's **Ask AI** use the AI Chat's agent and timeout
+([settings](#local-settings-and-storage)). Each is one read-only, one-shot call in a folder under
+`.pr-review/<repo>/lists/ai/` whose Claude Code settings deny writing, running commands, the web,
+and reading credential files. Highest priority reads a context file of the queue's facts (titles,
+authors, labels, branches, sizes, reviews, checks, counts), never what anyone wrote; Ask AI reads
+only the page's filters, saved filters and saved groups of people.
+
+The lists keep their files in `.pr-review/<repo>/lists/`, shared by the clone's worktrees:
+
+| File                       | Contents                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `pulls.json`, `queue.json` | The last read of each list: logins, titles, labels, branches, counts and check states. No comment text |
+| `settings.json`            | Sections, base branches, and Highest priority's prompts and count                                      |
+| `filters.json`             | Each table's last filters, hidden columns, folds, saved filters and saved author searches              |
+| `priority.json`            | Highest priority's last picks, with the agent's reasons                                                |
+| `people.json`              | The project's people, by login, that the pickers and the Reviewers popup offer                         |
+
 ## Local settings and storage
 
 The data directory's `settings.yml` accepts these keys and values:

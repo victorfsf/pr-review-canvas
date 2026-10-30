@@ -7,6 +7,7 @@ import { type Host, publicHost } from '../host/host.js'
 import { esc } from '../../static/js/dom.js'
 import { headerBarHtml, type ProjectLink } from '../../static/js/header-bar.js'
 import { basePathOf, slugParts } from '../hub/slug.js'
+import { listsMain, type ProjectTab, projectTabs } from './lists-html.js'
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>
 
@@ -55,6 +56,8 @@ export interface PageOptions {
 const PAGE_APPEARANCE_SCRIPT = '/static/js/page-appearance.js'
 /** The module behind the project list's remove commands. */
 const PROJECTS_PAGE_SCRIPT = '/static/js/projects-page.js'
+/** The module behind the home page's tables: Your PRs or the Review queue. */
+const LISTS_PAGE_SCRIPT = '/static/js/lists/home-page.js'
 
 export function pageShell(opts: PageOptions): Html {
   const preload = Object.entries(IMPORT_MAP.imports)
@@ -121,13 +124,20 @@ export function homePage(
     localReviews: readonly LocalKey[]
     /** An agent can run here, so the page offers to generate a canvas as well as to open one. */
     canGenerate: boolean
+    /** Which tab the page is: the project's home, Your PRs, or the Review queue. */
+    tab: ProjectTab
+    /** The filters the tables saved, which the page arrives with. */
+    savedFilters: Record<string, unknown>
   },
   nonce: string,
   appearance: Appearance
 ): Html {
   const { noun, nounShort, label } = data.host
   return pageShell({
-    title: 'PR review canvas',
+    title:
+      data.tab === 'home'
+        ? 'PR review canvas'
+        : `${data.tab === 'queue' ? 'Review queue' : `Your ${nounShort}s`} · ${data.owner}/${data.repo} · review canvas`,
     bootstrap: {
       owner: data.owner,
       repo: data.repo,
@@ -138,7 +148,7 @@ export function homePage(
     nonce,
     appearance,
     app: false,
-    scripts: [PAGE_APPEARANCE_SCRIPT],
+    scripts: data.tab === 'home' ? [PAGE_APPEARANCE_SCRIPT] : [PAGE_APPEARANCE_SCRIPT, LISTS_PAGE_SCRIPT],
     body: html`<div class="page">
 <header class="hdr">
 ${raw(headerBarHtml({ project: data.project, ...appearance }, `<a class="cmd" id="health" href="${esc(data.base)}api/health" title="Check git, the host login, and the chat agent for this project">health</a>`))}
@@ -146,7 +156,10 @@ ${raw(headerBarHtml({ project: data.project, ...appearance }, `<a class="cmd" id
 <div class="hdr-title"><div class="title"><h1>${data.owner}/${data.repo}</h1></div>
 <p class="meta"><span>Open a ${noun} by number. Diffs come from your local clone; the canvas from a published review.</span></p></div>
 </header>
-<main id="main" class="home">
+${projectTabs({ base: data.base, nounShort, tab: data.tab })}
+${
+  data.tab === 'home'
+    ? html`<main id="main" class="home">
 <section class="panel"><div class="panel-h"><h2>Open a ${noun}</h2></div>
 <form class="body home-form" method="get" action="${data.base}review">
 <label>${nounShort} number <input name="n" type="number" min="1" required inputmode="numeric"></label>
@@ -155,20 +168,21 @@ ${data.canGenerate ? html`<button class="cmd" type="submit" name="generate" valu
 </form></section>
 <section class="panel"><div class="panel-h"><h2>Before the ${noun}</h2></div>
 <div class="body">${
-      data.localReviews.length === 0
-        ? html`<p class="muted">Nothing reviewed here yet. Run <code>/pr-review-canvas branch</code> to read the current branch against the default one, or <code>/pr-review-canvas uncommitted</code> to read it with your working-tree edits on top, before opening a ${noun}.</p>`
-        : html`<ul class="plain">${data.localReviews.map(
-            key =>
-              html`<li><a href="${data.base}review/${key}">${keyLabel(key)}</a> <span class="muted">${data.base}review/${key}</span></li>`
-          )}</ul>`
-    }${
-      // Each local review not started here yet can be, whether or not the other one was.
-      data.canGenerate && data.localReviews.length < LOCAL_KEYS.length
-        ? html`<p class="tbtns">${LOCAL_KEYS.filter(key => !data.localReviews.includes(key)).map(
-            key => html`<a class="cmd" href="${data.base}review/${key}?generate=1">${LOCAL_GENERATE[key]}</a>`
-          )}</p>`
-        : ''
-    }</div></section>
+        data.localReviews.length === 0
+          ? html`<p class="muted">Nothing reviewed here yet. Run <code>/pr-review-canvas branch</code> to read the current branch against the default one, or <code>/pr-review-canvas uncommitted</code> to read it with your working-tree edits on top, before opening a ${noun}.</p>`
+          : html`<ul class="plain">${data.localReviews.map(
+              key =>
+                html`<li><a href="${data.base}review/${key}">${keyLabel(key)}</a> <span class="muted">${data.base}review/${key}</span></li>`
+            )}</ul>`
+      }${
+        // Each local review not started here yet can be, whether or not the other one was.
+        data.canGenerate && data.localReviews.length < LOCAL_KEYS.length
+          ? html`<p class="tbtns">${LOCAL_KEYS.filter(key => !data.localReviews.includes(key)).map(
+              key =>
+                html`<a class="cmd" href="${data.base}review/${key}?generate=1">${LOCAL_GENERATE[key]}</a>`
+            )}</p>`
+          : ''
+      }</div></section>
 <section class="panel"><div class="panel-h"><h2>Recent</h2></div>
 ${
   data.recentPrs.length === 0
@@ -179,7 +193,18 @@ ${
       )}</ul>`
 }
 </section>
-</main>
+</main>`
+    : listsMain({
+        tab: data.tab,
+        owner: data.owner,
+        repo: data.repo,
+        base: data.base,
+        forge: label,
+        nounShort,
+        canGenerate: data.canGenerate,
+        savedFilters: data.savedFilters,
+      })
+}
 <footer><span>pr-review ${data.version}</span><span>local review app · ${label} operations and AI requests contact their services</span></footer>
 </div>`,
   })

@@ -148,6 +148,26 @@ One server serves all your projects:
   gets `/r/<owner>/<repo>~<worktree>/`, since its branch and working tree differ from the main
   checkout's.
 
+Beside the project's home page, two tabs list its open pull requests, on GitHub and GitLab alike:
+
+- **Your PRs:** your open and draft PRs (MRs on GitLab), with their checks, merge conflicts, what
+  waits on you, who reviewed them, how long they have been ready, labels, and whether a canvas exists
+  for the head commit.
+- **Review queue:** everyone else's open PRs, with the same columns, the author, and what waits on
+  you and on others. **Highest priority** above it asks the chat agent, when you press its sync
+  button, which few PRs to review first, by a prompt you can edit.
+
+Both tables group PRs into sections by label, put PRs based on another PR's branch in a stacked
+table, and filter by state, reviews, reviewers or authors, labels, base branch, stack, checks and
+canvas status. A search box (`/`) narrows by title, branch, or `#123`; Columns hides columns; the
+list button makes rows slim; filters can be saved by name. **Builder** composes filters in AND/OR
+blocks, and its **Ask AI** fills the blocks from what you describe. Clicking a PR opens its canvas, and the title's menu
+also opens the PR on GitHub or GitLab, each in a new tab. The **Canvas** column says whether each
+PR's canvas is **Pending**, **Stale**, **Ready** or **Generating**, and **Attention points** how
+many of its points are still open for you. Each row's action is **Generate** or **Regenerate**,
+which opens the generate dialog, **Stop** while it generates, or **Open** once it is ready. See
+[Your PRs and the Review queue](docs/reference.md#your-prs-and-the-review-queue).
+
 ## Documentation
 
 - [CLI and configuration reference](docs/reference.md): command options and troubleshooting.

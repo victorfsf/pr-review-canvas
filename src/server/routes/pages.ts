@@ -1,10 +1,11 @@
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { type Appearance, type AppearanceQuery, appearanceForRequest } from '../../contract/settings.js'
 import type { AppContext } from '../context.js'
 import type { AppEnv } from '../env.js'
 import { AppError } from '../errors.js'
 import { LOCAL_KEYS, parseReviewKey } from '../../contract/review-key.js'
 import { homePage, reviewPage } from '../html.js'
+import type { ProjectTab } from '../lists-html.js'
 import { startPage } from '../start-page.js'
 import type { ProjectLink } from '../../../static/js/header-bar.js'
 
@@ -41,10 +42,12 @@ export function projectLink(ctx: AppContext, served: Served): ProjectLink {
 export function pageRoutes(ctx: AppContext, project: ProjectLink): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
 
-  app.get('/', async c => {
-    const [acpx, recentPrs, ...localPrs] = await Promise.all([
+  /** One tab of the project: its home at the root, Your PRs at `pulls`, the Review queue at `queue`. */
+  const home = (tab: ProjectTab) => async (c: Context<AppEnv>) => {
+    const [acpx, recentPrs, savedFilters, ...localPrs] = await Promise.all([
       ctx.projectConfig.config.chat.enabled ? ctx.preflight.get() : Promise.resolve({ installed: false }),
       ctx.prs.listRecent(10),
+      ctx.lists.store.readFilters(),
       ...LOCAL_KEYS.map(key => ctx.prs.readPr(key)),
     ])
     const canvases = Object.values((await ctx.canvases.readIndex()).canvases)
@@ -63,12 +66,17 @@ export function pageRoutes(ctx: AppContext, project: ProjectLink): Hono<AppEnv> 
           base: ctx.config.basePath,
           host: ctx.config.host,
           canGenerate: acpx.installed,
+          tab,
+          savedFilters,
         },
         c.get('cspNonce'),
         await appearanceFor(ctx, appearanceQuery(c))
       )
     )
-  })
+  }
+  app.get('/', home('home'))
+  app.get('/pulls', home('pulls'))
+  app.get('/queue', home('queue'))
 
   // Where `pr-review open` and `serve` point the browser. The lookup runs here rather than in the
   // command, so the browser opens at once and lands on the branch's open review when it is found.

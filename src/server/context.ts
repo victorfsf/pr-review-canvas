@@ -26,6 +26,8 @@ import {
 } from '../generate/generation-manager.js'
 import { loadGenerationSkill } from '../generate/skill.js'
 import { createGit, execGitIn, type Git } from '../git/git.js'
+import { canvasFactsOf } from '../lists/canvas-status.js'
+import { createListsSet, type ListsSet } from '../lists/set.js'
 import { type CapabilityProbe, createCapabilityProbe } from '../host/capabilities.js'
 import { createHostClient, execCliIn, type HostClient } from '../host/client.js'
 import { describeFixes, fixModel } from '../review/fix-model.js'
@@ -77,6 +79,8 @@ export interface AppContext {
   chat: ChatManager
   /** The canvas generation the review page starts. */
   generation: GenerationManager
+  /** The home page's tables: Your PRs and the Review queue. */
+  lists: ListsSet
   /** What the context shares with the other worktrees of its clone. */
   clone: CloneShared
   /** The acpx boundary, shared by the chat and the generation the review page starts. */
@@ -249,7 +253,7 @@ export function createChatSet(
  * built from the rest of the context, and its steps run over the whole context once it exists.
  */
 export function createContextGeneration(
-  ctx: Omit<AppContext, 'generation'>,
+  ctx: Omit<AppContext, 'generation' | 'lists'>,
   lane: GenerationLane,
   whole: () => AppContext
 ): GenerationManager {
@@ -289,7 +293,7 @@ export function createAppContext(opts: CreateAppContextOptions): AppContext {
   const runner = opts.runner ?? createAgentRunner({ env })
   const stores = createStores(opts.config.dataDir, opts.config, git, now)
   const clone = opts.clone ?? createCloneShared(opts.config, now)
-  const parts: Omit<AppContext, 'generation'> = {
+  const parts: Omit<AppContext, 'generation' | 'lists'> = {
     config: opts.config,
     clone,
     log: opts.log ?? (line => process.stderr.write(`${line}\n`)),
@@ -309,6 +313,16 @@ export function createAppContext(opts: CreateAppContextOptions): AppContext {
   const ctx: AppContext = {
     ...parts,
     generation: createContextGeneration(parts, clone.generationLane, () => ctx),
+    lists: createListsSet({
+      config: parts.config,
+      gh: parts.gh,
+      runner: parts.runner,
+      chatSettings: () => ctx.chat.effectiveSettings(),
+      canvasFacts: pull => canvasFactsOf(ctx, pull),
+      generation: () => ctx.generation,
+      now: parts.now,
+      log: parts.log,
+    }),
   }
   return ctx
 }

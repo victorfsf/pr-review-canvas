@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Your PRs and the Review queue
+
+- Two new project tabs beside **Home** list open pull requests, on GitHub and GitLab: **Your PRs**
+  and the **Review queue** (everyone else's). Their rows show checks, merge conflicts, what waits on
+  you (and, on the queue, on others), who reviewed them, how long they have been ready, labels, and
+  the canvas status (Pending, Stale, Ready or Generating) and the canvas's open attention points.
+  Clicking a PR opens its canvas in a new tab, and its menu opens it on the forge. Each row's
+  action generates or regenerates its canvas through the generate dialog, stops a generation under
+  way, or opens the canvas.
+- Both tables group PRs into sections by label, list stacked PRs apart, and filter by state,
+  reviews, people, labels, base branch, stack, checks and canvas status, with a search box, column
+  picker, slim rows and saved filters. **Builder** composes filters in AND/OR blocks, and **Ask
+  AI** fills them from a description.
+- **Highest priority** on the Review queue asks the chat agent which PRs to review first, by a
+  prompt you can edit, each time you press its sync button.
+
 ## 0.10.0
 
 Changes since 0.9.0.
