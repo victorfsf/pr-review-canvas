@@ -552,20 +552,26 @@ from the forge through `gh` or `glab` when a tab first opens, again behind the p
 more than two minutes old, and at once with the sync button beside the tabs. An open tab loads again
 every minute while it is in view.
 
-| Column           | What it shows                                                                                                                                                                                                                     |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status           | The head commit's checks (failing, running, stuck, passing) and a merge conflict; on the queue, a request for your review by name                                                                                                 |
-| Pending          | Your PRs: unresolved threads whose last comment is not yours, standing change requests, comments after your last word, failing or stuck CI, a conflict. The queue: what names you since you last wrote, then what waits on others |
-| Attention points | The canvas's attention points still open for you: not resolved by the author, not posted or in your pending review, not dismissed. A dash while the canvas is not on this machine; opening the PR imports a shared one            |
-| Review           | Your PRs: approved, changes requested, or review required                                                                                                                                                                         |
-| Reviewed by      | Who approved, requested changes or commented; comments posted from the canvas and from bots each count as one entry                                                                                                               |
-| Author           | The queue's PR author                                                                                                                                                                                                             |
-| Ready            | How long since the PR left draft, or since it entered GitHub's merge queue                                                                                                                                                        |
-| Labels           | Its labels                                                                                                                                                                                                                        |
-| Canvas           | **Ready** when a canvas stands for the head commit (shared for it, or here, carried over when the diff is identical); **Stale** when canvases exist only for other commits; **Pending** with none; **Generating** while one runs  |
+| Column           | What it shows                                                                                                                                                                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status           | The head commit's checks (failing, running, stuck, passing) and a merge conflict; on the queue, a request for your review by name                                                                                                                                    |
+| Pending          | Your PRs: unresolved threads whose last comment is not yours, standing change requests, comments after your last word, failing or stuck CI, a conflict. The queue: what names you since you last wrote, then what waits on others                                    |
+| Attention points | The canvas's attention points still open, for the author \| for the reviewer: not resolved by the author, not posted or in your pending review, not dismissed. From the shared canvas comment's tally while the canvas is not on this machine; a dash with no canvas |
+| Review           | Your PRs: approved, changes requested, or review required                                                                                                                                                                                                            |
+| Reviewed by      | Who approved, requested changes or commented; comments posted from the canvas and from bots each count as one entry                                                                                                                                                  |
+| Author           | The queue's PR author                                                                                                                                                                                                                                                |
+| Ready            | How long since the PR left draft, or since it entered GitHub's merge queue                                                                                                                                                                                           |
+| Labels           | Its labels                                                                                                                                                                                                                                                           |
+| Canvas           | **Ready** when a canvas stands for the head commit (shared for it, or here, carried over when the diff is identical); **Stale** when canvases exist only for other commits; **Pending** with none; **Generating** while one runs                                     |
 
 On GitLab, approvals stand for reviews, resolvable discussions for threads, and the head pipeline's
 jobs for checks; a job allowed to fail never fails the merge request.
+
+The Reviews filter's **Only PRs with** keeps PRs with **Pending work** (the Pending column; on the
+queue its left number), on the queue **Work waiting on others** (its right number), and **Author
+attention points** or **Reviewer attention points** (the Attention points column's two numbers).
+Pending work can stay above zero after the attention points are answered: it counts what is still
+open on the forge, such as threads the author has not resolved.
 
 Each row's **Reviewers** button opens who the PR asks to review it: saved groups, then the
 project's people (GitHub's assignable users, or the GitLab project's members), those on the PR

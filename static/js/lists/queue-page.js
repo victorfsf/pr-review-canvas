@@ -94,6 +94,32 @@ import { reviewRequests } from './review-requests.js'
 const statusBadge = (doc, status) => el(doc, 'span', `badge ${STATUS_TONE[status]}`, status)
 
 /**
+ * The Pending cell: what waits on you, then what waits on the author or other reviewers, as
+ * "3 | 5"; nothing before a fetch read the PR's activity.
+ * @param {Document} doc
+ * @param {number | undefined} count
+ * @param {number} [waiting]
+ */
+export function pendingBadge(doc, count, waiting) {
+  const wrap = el(doc, 'span', 'pull-pending')
+  if (count === undefined) return wrap
+  const pill = el(doc, 'span', 'badge pending-pill')
+  const mine = el(doc, 'span', count > 0 ? 'pending-count' : 'pending-count muted', String(count))
+  mine.title = TEXTS.lists.queue.waitingOnYou(count)
+  pill.append(mine)
+  if (waiting !== undefined) {
+    // A drawn line between the two numbers, not a character a screen reader would read out.
+    const divider = el(doc, 'span', 'pending-divider')
+    divider.setAttribute('aria-hidden', 'true')
+    const others = el(doc, 'span', 'pending-count muted', String(waiting))
+    others.title = TEXTS.lists.queue.waitingOnOthers(waiting)
+    pill.append(divider, others)
+  }
+  wrap.append(pill)
+  return wrap
+}
+
+/**
  * One PR's row; a Highest priority row also says why Claude picked it.
  * @param {Document} doc
  * @param {QueueRow & { why?: string }} row
@@ -160,6 +186,7 @@ function queueRow(doc, row, branches, shows, now, anchor, pickStack, slim, revie
   /** @type {Record<(typeof QUEUE_COLUMNS)[number][0], () => HTMLElement>} */
   const cells = {
     status: () => cell(healthNode(doc, row.health, row.requested)),
+    pending: () => cell(pendingBadge(doc, row.pending, row.waiting)),
     points: () => cell(pointsCell(doc, row.points)),
     reviewed: () => cell(reviewersNode(doc, row.reviewers)),
     author: () => el(doc, 'td', undefined, row.author),
@@ -389,7 +416,7 @@ export function wireQueuePage(doc) {
       columns: shown,
       // Status says what its icons are, Pending what its two numbers are, and Reviewed by its
       // marks, behind a "?" each.
-      help: { status: 'status-help', reviewed: 'reviewed-by-help' },
+      help: { status: 'status-help', pending: 'pending-help', reviewed: 'reviewed-by-help' },
       sort: sorted
         ? { sort: filters.sort, onSort: sort => change({ sort }), sortable: column => column !== 'reviewed' }
         : null,

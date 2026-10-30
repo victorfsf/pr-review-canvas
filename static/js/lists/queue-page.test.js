@@ -6,7 +6,7 @@ import { SEARCH_DELAY_MS } from './search.js'
 import { flushSavedFilters, loadPresets, loadSearches, resetSavedFilters } from './filters.js'
 import { resetGenerateDialogs } from './generate-dialog.js'
 import { DEFAULT_PRIORITY_PROMPT } from './priority.js'
-import { wireQueuePage } from './queue-page.js'
+import { pendingBadge, wireQueuePage } from './queue-page.js'
 
 const REPO = { owner: 'acme', name: 'widgets' }
 /** The project's base path on the server, which every link and API call starts with. */
@@ -389,6 +389,8 @@ describe('the Review queue', () => {
       'No review',
       'Awaiting your review',
       'Not awaiting your review',
+      'Pending work',
+      'Work waiting on others',
       'Author attention points',
       'Reviewer attention points',
     ])
@@ -721,8 +723,8 @@ describe('the Review queue', () => {
     )
     expect(document.querySelector('#queue-table [aria-label="Sort by coderabbit"]')).toBeNull()
     expect(document.querySelector('#queue-table [aria-label="Sort by canvas"]')).not.toBeNull()
-    expect(document.querySelector('#queue-table .section-row th')?.getAttribute('colspan')).toBe('9')
-    expect(document.querySelector('#queue-table tbody tr.queue-row')?.children.length).toBe(9)
+    expect(document.querySelector('#queue-table .section-row th')?.getAttribute('colspan')).toBe('10')
+    expect(document.querySelector('#queue-table tbody tr.queue-row')?.children.length).toBe(10)
     // Section rows stick under the column header, as far down as it is tall.
     expect(document.getElementById('queue-table')?.style.getPropertyValue('--head-height')).toMatch(
       /^[\d.]+px$/
@@ -730,7 +732,7 @@ describe('the Review queue', () => {
     // Columns offers Canvas, not CodeRabbit.
     expect(
       [...document.querySelectorAll('#columns-options input')].map(i => i.getAttribute('data-column'))
-    ).toEqual(['status', 'points', 'reviewed', 'author', 'ready', 'labels', 'canvas'])
+    ).toEqual(['status', 'pending', 'points', 'reviewed', 'author', 'ready', 'labels', 'canvas'])
   })
 
   it('loads again while the server is still reading the queue, and stops once it is in', async () => {
@@ -845,10 +847,10 @@ describe('the Review queue', () => {
     const points = () =>
       [...document.querySelectorAll('#queue-table .queue-row')].map(r => [
         r.querySelector('.pull-number')?.textContent,
-        r.children[2]?.textContent,
+        r.children[3]?.textContent,
       ])
     // One pill holds both numbers, split by a drawn line rather than a "|".
-    const pill = document.querySelector('#pr-1 .pending-pill')
+    const pill = document.querySelector('#pr-1')?.children[3]?.querySelector('.pending-pill')
     expect(pill?.querySelector('.pending-divider')?.getAttribute('aria-hidden')).toBe('true')
     expect([...(pill?.querySelectorAll('.pending-count') ?? [])].map(c => c.getAttribute('title'))).toEqual([
       '2 for the author',
@@ -866,9 +868,90 @@ describe('the Review queue', () => {
     ])
     header().click()
     expect(points().map(p => p[0])).toEqual(['#1', '#3', '#2'])
-    // The Pending column is gone.
-    expect(document.querySelector('#queue-table [aria-label="Sort by pending"]')).toBeNull()
-    expect(document.querySelector('#queue-table .pull-pending')).toBeNull()
+  })
+
+  it('shows and sorts by what waits on you, beside what waits on others, empty before a fetch read it', async () => {
+    answer = {
+      ...answer,
+      sections: [{ name: 'Tasks', labels: [] }],
+      rows: [
+        row({ number: 3, pending: 2, waiting: 1 }),
+        row({ number: 2 }),
+        row({ number: 1, pending: 0, waiting: 4 }),
+        row({ number: 4, pending: 5, waiting: 0 }),
+      ],
+    }
+    const page = await load()
+    const pending = () =>
+      [...document.querySelectorAll('#queue-table .queue-row')].map(r => [
+        r.querySelector('.pull-number')?.textContent,
+        r.children[2]?.textContent,
+      ])
+    expect(
+      document.querySelector('#pr-2')?.children[2]?.querySelector('.pull-pending')?.childElementCount
+    ).toBe(0)
+    const counts = (/** @type {number} */ pr) =>
+      [...(document.querySelector(`#pr-${pr}`)?.children[2]?.querySelectorAll('.pending-count') ?? [])].map(
+        c => [c.className, c.getAttribute('title')]
+      )
+    expect(counts(3)).toEqual([
+      ['pending-count', '2 waiting on you'],
+      ['pending-count muted', '1 waiting on others'],
+    ])
+    expect(counts(1)[0]).toEqual(['pending-count muted', '0 waiting on you'])
+    // Its "?" says what the two numbers are.
+    const help = document.querySelector('#queue-table th[data-col="pending"] .help-button')
+    expect(document.getElementById(String(help?.getAttribute('aria-describedby')))?.textContent).toContain(
+      'Sorting by Pending sorts by the left number.'
+    )
+    const header = () =>
+      /** @type {HTMLButtonElement} */ (
+        document.querySelector('#queue-table thead [data-col="pending"] button')
+      )
+    header().click()
+    expect(pending()).toEqual([
+      ['#2', ''],
+      ['#1', '04'],
+      ['#3', '21'],
+      ['#4', '50'],
+    ])
+    header().click()
+    expect(page.numbers()).toEqual(['#4', '#3', '#1', '#2'])
+    expect(new URLSearchParams(location.search).getAll('sort')).toEqual(['-pending'])
+  })
+
+  it('keeps the PRs with pending work, or work waiting on others, from Only PRs with', async () => {
+    answer = {
+      ...answer,
+      rows: [
+        row({ number: 31, labels: ['bug'], pending: 1, waiting: 0 }),
+        row({ number: 32, labels: ['bug'], pending: 0, waiting: 2 }),
+        row({ number: 33, labels: ['bug'], pending: 3, waiting: 3 }),
+        row({ number: 34, labels: ['bug'] }),
+      ],
+    }
+    const page = await load()
+    const flag = (/** @type {string} */ key) => {
+      const box = /** @type {HTMLInputElement} */ (
+        document.querySelector(`#review-filter [data-filter="${key}"]`)
+      )
+      box.checked = !box.checked
+      box.dispatchEvent(new Event('change'))
+    }
+    flag('pending')
+    expect(page.numbers()).toEqual(['#31', '#33'])
+    expect(page.get('review-filter-label').textContent).toBe('All · Pending work')
+    expect(new URLSearchParams(location.search).get('pending')).toBe('1')
+    flag('pending')
+    flag('waiting')
+    expect(page.numbers()).toEqual(['#32', '#33'])
+    expect(page.get('review-filter-label').textContent).toBe('All · Waiting on others')
+    expect(new URLSearchParams(location.search).get('waiting')).toBe('1')
+    flag('pending')
+    expect(page.numbers()).toEqual(['#33'])
+    expect(page.get('review-filter-label').textContent).toBe('All · 2 more')
+    page.click('reset-filters')
+    expect(page.numbers()).toEqual(['#31', '#32', '#33', '#34'])
   })
 
   it('loads again while a canvas generation is under way, and stops once it ends', async () => {
@@ -962,7 +1045,7 @@ describe('the Review queue', () => {
     box('labels').click()
     expect(location.search).toBe('?sort=author')
     expect(head()).not.toContain('Labels')
-    expect(document.getElementById('columns-label')?.textContent).toBe('6 of 7')
+    expect(document.getElementById('columns-label')?.textContent).toBe('7 of 8')
     expect(document.querySelector('#pr-512 .label-badge')).toBeNull()
     expect(JSON.parse(store.get('pr-greenlight:columns:v1:acme/widgets') ?? '{}')).toEqual({
       queue: ['labels'],
@@ -976,11 +1059,15 @@ describe('the Review queue', () => {
     await load()
     expect(head()).toEqual(['Pull request', 'Actions'])
     document.getElementById('columns-all')?.click()
-    expect(head()).toHaveLength(9)
+    expect(head()).toHaveLength(10)
     box('points').click()
     box('points').click()
-    expect(head()).toContain('Attention points')
+    box('pending').click()
     expect(head()).not.toContain('Pending')
+    expect(document.querySelector('#pr-512 .pull-pending')).toBeNull()
+    box('pending').click()
+    expect(head()).toContain('Attention points')
+    expect(head()).toContain('Pending')
     expect(store.has('pr-greenlight:columns:v1:acme/widgets')).toBe(false)
   })
 
@@ -2011,5 +2098,38 @@ describe('review requests from the Review queue', () => {
       'bob',
       'cy',
     ])
+  })
+})
+
+describe('pendingBadge', () => {
+  const counts = (/** @type {HTMLElement} */ badge) =>
+    [...badge.querySelectorAll('.pending-count')].map(c => [
+      c.className,
+      c.textContent,
+      c.getAttribute('title'),
+    ])
+
+  it('is empty before a fetch read the PR’s activity', () => {
+    const badge = pendingBadge(document, undefined, 3)
+    expect(badge.className).toBe('pull-pending')
+    expect(badge.childElementCount).toBe(0)
+  })
+
+  it('shows what waits on you, muted at none, and alone without a count for others', () => {
+    const some = pendingBadge(document, 2)
+    expect(some.querySelector('.badge')?.className).toBe('badge pending-pill')
+    expect(counts(some)).toEqual([['pending-count', '2', '2 waiting on you']])
+    expect(some.querySelector('.pending-divider')).toBeNull()
+    expect(counts(pendingBadge(document, 0))).toEqual([['pending-count muted', '0', '0 waiting on you']])
+  })
+
+  it('adds what waits on others after a drawn line a screen reader skips', () => {
+    const both = pendingBadge(document, 1, 0)
+    expect(counts(both)).toEqual([
+      ['pending-count', '1', '1 waiting on you'],
+      ['pending-count muted', '0', '0 waiting on others'],
+    ])
+    expect(both.querySelector('.pending-divider')?.getAttribute('aria-hidden')).toBe('true')
+    expect(both.textContent).toBe('10')
   })
 })

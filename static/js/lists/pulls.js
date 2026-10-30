@@ -43,23 +43,32 @@ export const reviewChoices = (queue = false) =>
   queue ? [...REVIEW_STATES, ...REQUEST_CHOICES] : REVIEW_STATES
 
 /**
- * The Reviews filter's other boxes, under "Only PRs with": checked, each must hold as well: the PR's
- * canvas has attention points still open for the author, or for the reviewer (the Attention points
- * cell's two numbers). Each has its words in the popup, then on the button. Canvas and bot reviews
- * are the Integrations filter's.
+ * The Reviews filter's other boxes, under "Only PRs with": checked, each must hold as well. Pending
+ * work: the PR has comments, threads, reviews or requests waiting on you (the Pending column; the
+ * Review queue's left number); on the queue, Work waiting on others: some waiting on the author or
+ * other reviewers (its right number). Then attention points still open for the author, or for the
+ * reviewer, in its canvas (the Attention points cell's two numbers). Each has its words in the
+ * popup, then on the button. Canvas and bot reviews are the Integrations filter's.
  */
-export const REVIEW_FLAGS = /** @type {const} */ ([
+const PENDING_FLAG = /** @type {const} */ (['pending', 'Pending work', 'Pending work'])
+const POINT_FLAGS = /** @type {const} */ ([
   ['authorPoints', 'Author attention points', 'Author points'],
   ['reviewerPoints', 'Reviewer attention points', 'Reviewer points'],
 ])
-/** @typedef {(typeof REVIEW_FLAGS)[number][0]} ReviewFlag */
+export const REVIEW_FLAGS = /** @type {const} */ ([PENDING_FLAG, ...POINT_FLAGS])
+export const QUEUE_REVIEW_FLAGS = /** @type {const} */ ([
+  PENDING_FLAG,
+  ['waiting', 'Work waiting on others', 'Waiting on others'],
+  ...POINT_FLAGS,
+])
+/** @typedef {(typeof QUEUE_REVIEW_FLAGS)[number][0]} ReviewFlag */
 
 /**
- * The Reviews filter's boxes on a page: the same on both tables.
- * @param {boolean} [_queue]
+ * The Reviews filter's boxes on a page: the Review queue's, with Work waiting on others, or Your PRs'.
+ * @param {boolean} [queue]
  * @returns {readonly (readonly [ReviewFlag, string, string])[]}
  */
-export const reviewFlags = (_queue = false) => REVIEW_FLAGS
+export const reviewFlags = (queue = false) => (queue ? QUEUE_REVIEW_FLAGS : REVIEW_FLAGS)
 
 /** The Reviewers filter's choice for a PR nobody has reviewed. */
 export const NO_REVIEWER = ':none'
@@ -68,6 +77,7 @@ export const NO_REVIEWER = ':none'
 export const PULL_SORTS = /** @type {const} */ ([
   'pr',
   'status',
+  'pending',
   'points',
   'review',
   'reviewed',
@@ -84,11 +94,12 @@ const REVIEW_ORDER = ['Changes requested', 'Review required', 'No review yet', '
  * Each column's ascending order for Your PRs' rows, given each PR's health and statuses by number.
  * @param {Readonly<Record<number, import('./health.js').Health>>} health
  * @param {Readonly<Record<number, { canvas: string, codeRabbit: string }>>} statuses
+ * @param {Readonly<Record<number, number>>} [pending] each PR's pending items, by number
  * @param {Readonly<Record<number, { author: number, reviewer: number }>>} [points] each PR's open
  *   attention points, by number
  * @returns {Record<(typeof PULL_SORTS)[number], (a: Pull, b: Pull) => number>}
  */
-export function pullCompare(health, statuses, points = {}) {
+export function pullCompare(health, statuses, pending = {}, points = {}) {
   const status = (/** @type {string | undefined} */ s) => {
     const at = STATUS_ORDER.indexOf(s ?? '')
     return at === -1 ? STATUS_ORDER.length : at
@@ -96,6 +107,7 @@ export function pullCompare(health, statuses, points = {}) {
   return {
     pr: (a, b) => a.number - b.number,
     status: (a, b) => healthRank(health[a.number]) - healthRank(health[b.number]),
+    pending: (a, b) => (pending[a.number] ?? -1) - (pending[b.number] ?? -1),
     // A PR whose canvas is not here sorts before one with no open point.
     points: (a, b) => openTotal(points[a.number]) - openTotal(points[b.number]),
     review: (a, b) => REVIEW_ORDER.indexOf(reviewLabel(a).text) - REVIEW_ORDER.indexOf(reviewLabel(b).text),
@@ -123,6 +135,7 @@ export const PULLS_DEFAULTS = {
   needsUpdate: false,
   /** The review states that keep a PR (see `REVIEW_STATES`). */
   reviews: ALL,
+  pending: false,
   authorPoints: false,
   reviewerPoints: false,
   /** Logins whose reviews keep a PR, and `NO_REVIEWER` for a PR nobody reviewed. */
@@ -158,6 +171,7 @@ export const PULLS_ACCEPT = {
   state: acceptStates,
   needsUpdate: isBool,
   reviews: within(REVIEW_STATE_KEYS),
+  pending: isBool,
   authorPoints: isBool,
   reviewerPoints: isBool,
   reviewers: isStrings,
@@ -201,7 +215,8 @@ export function reviewState(pull) {
 
 /**
  * The Reviews filter's part of a page's filters: the choices ticked, and the flags.
- * @typedef {{ reviews: string[] | null, authorPoints: boolean, reviewerPoints: boolean }} ReviewsPicked
+ * @typedef {{ reviews: string[] | null, pending: boolean, waiting?: boolean, authorPoints: boolean,
+ *   reviewerPoints: boolean }} ReviewsPicked
  */
 
 /**
@@ -219,16 +234,21 @@ export function checkedFlags(filters, queue = false) {
  * Whether the Reviews filter keeps a PR. Its choices are two groups: the review states, and on the
  * Review queue whether a PR asks you by name for your review. The ticked choices of a group keep a
  * PR with any of them, and each group with some ticked must hold; a group with none ticked is left
- * out, and with none ticked in either, nothing passes. Then "Author attention points", checked,
+ * out, and with none ticked in either, nothing passes. Then "Pending work", checked, must hold
+ * too: the PR has pending items; on the queue so must "Work waiting on others": items waiting on
+ * someone else. And "Author attention points", checked,
  * must hold too: its canvas has points still open for the author; and so must "Reviewer attention
  * points": points still open for the reviewer.
  * @param {Pick<Pull, 'reviewers'> & { requested?: boolean }} pr
  * @param {ReviewsPicked} f
- * @param {{ points?: { author: number, reviewer: number } | undefined, queue?: boolean }} opts the
- *   PR's open attention points, none with no canvas
+ * @param {{ pending?: number, waiting?: number, points?: { author: number, reviewer: number } | undefined,
+ *   queue?: boolean }} opts the PR's pending items, its items waiting on others, and its open
+ *   attention points, none with no canvas
  */
 export function keepsReviews(pr, f, opts) {
   const flags =
+    (!f.pending || (opts.pending ?? 0) > 0) &&
+    (f.waiting !== true || (opts.waiting ?? 0) > 0) &&
     (!f.authorPoints || (opts.points?.author ?? 0) > 0) &&
     (!f.reviewerPoints || (opts.points?.reviewer ?? 0) > 0)
   const picked = f.reviews
@@ -255,6 +275,7 @@ export function keepsReviews(pr, f, opts) {
  *   canvas, the Canvas choices keep every PR
  * @param {Readonly<Record<number, { author: number, reviewer: number }>>} [points] each PR's open
  *   attention points, by number
+ * @param {Readonly<Record<number, number>>} [pending] each PR's pending items, by number
  */
 export function filterPulls(
   pulls,
@@ -262,12 +283,13 @@ export function filterPulls(
   health = {},
   statuses = {},
   on = { codeRabbit: true, vercel: true },
-  points = {}
+  points = {},
+  pending = {}
 ) {
   return pulls.filter(
     p =>
       filters.state.includes(stateOf(p)) &&
-      keepsReviews(p, filters, { points: points[p.number] }) &&
+      keepsReviews(p, filters, { pending: pending[p.number] ?? 0, points: points[p.number] }) &&
       keepsReviewers(p, filters.reviewers) &&
       matchesIntegrations(
         {

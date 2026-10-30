@@ -123,6 +123,16 @@ ${prose(T.legends.reviewedBy)}
 </span>`
 }
 
+/** The Pending header's "?": what its numbers count, on each tab. */
+function pendingHelp(tab: ListTab): Html {
+  return html`<span class="help-anchor">
+<button type="button" class="help-button" aria-describedby="pending-help-${tab}" aria-label="What the Pending numbers mean">${icon('help', 14)}</button>
+<div class="popover help-popover" id="pending-help-${tab}" role="tooltip">
+${prose(tab === 'queue' ? T.legends.pending : T.legends.pendingYours)}
+</div>
+</span>`
+}
+
 /** The Status header's "?": what each icon means; the Review queue's adds "Awaiting your review". */
 function statusHelp(tab: ListTab): Html {
   const legend = `status-help-${tab}`
@@ -400,6 +410,7 @@ ${foldHeading({ id: 'stacked-heading', fold: 'stacked', title: 'Stacked on other
 <div class="card queue-table" id="stacked-body"></div>
 </section>
 <template id="reviewed-by-help">${reviewedByHelp('pulls')}</template>
+<template id="pending-help">${pendingHelp('pulls')}</template>
 <template id="status-help">${statusHelp('pulls')}</template>`
 }
 
@@ -459,6 +470,7 @@ ${foldHeading({ id: 'queue-stacked-heading', fold: 'stacked', title: 'Stacked on
 </section>
 ${priorityDialog(slug)}
 <template id="reviewed-by-help">${reviewedByHelp('queue')}</template>
+<template id="pending-help">${pendingHelp('queue')}</template>
 <template id="status-help">${statusHelp('queue')}</template>`
 }
 

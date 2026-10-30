@@ -523,7 +523,9 @@ describe('the Pull requests page', () => {
       /** @type {HTMLInputElement} */ (document.querySelector(`#review-filter [data-filter="${name}"]`))
     expect(box('authorPoints').parentElement?.textContent?.trim()).toBe('Author attention points')
     expect(box('reviewerPoints').parentElement?.textContent?.trim()).toBe('Reviewer attention points')
-    expect(document.querySelector('#review-filter [data-filter="pending"]')).toBeNull()
+    // Your PRs has Pending work, and no Work waiting on others.
+    expect(box('pending').parentElement?.textContent?.trim()).toBe('Pending work')
+    expect(document.querySelector('#review-filter [data-filter="waiting"]')).toBeNull()
     box('authorPoints').click()
     expect(numbers()).toEqual(['#4', '#2'])
     box('reviewerPoints').click()
@@ -532,12 +534,6 @@ describe('the Pull requests page', () => {
     expect(numbers()).toEqual(['#3', '#2'])
     box('reviewerPoints').click()
     expect(numbers()).toEqual(['#4', '#3', '#2', '#1'])
-    // There is no Pending column to sort by.
-    expect(
-      [...document.querySelectorAll('#pull-table .sort-button')].some(b =>
-        b.textContent?.startsWith('Pending')
-      )
-    ).toBe(false)
   })
 
   it('counts Open and Draft from what the other filters keep', async () => {
@@ -578,7 +574,7 @@ describe('the Pull requests page', () => {
       ['Open', 'pull-state ok'],
     ])
     const ready = [...document.querySelectorAll('#pull-table tr.queue-row')].map(
-      r => r.children[5]?.textContent
+      r => r.children[6]?.textContent
     )
     expect(ready).toEqual(['1h', '5h'])
     expect(document.querySelector('#pull-table .ready-queued')?.getAttribute('title')).toBe(
@@ -603,7 +599,7 @@ describe('the Pull requests page', () => {
     expect(document.getElementById('state-button')?.hasAttribute('data-changed')).toBe(true)
     expect(document.getElementById('review-filter-button')?.hasAttribute('data-changed')).toBe(false)
     const saved =
-      '{"state":["draft"],"needsUpdate":false,"reviews":null,"authorPoints":false,"reviewerPoints":false,"reviewers":null,"bases":null,"stack":"","sort":[],"codeRabbit":null,"vercel":null,"github":null,"canvas":null,"builder":false,"where":"","q":"","v":2}'
+      '{"state":["draft"],"needsUpdate":false,"reviews":null,"pending":false,"authorPoints":false,"reviewerPoints":false,"reviewers":null,"bases":null,"stack":"","sort":[],"codeRabbit":null,"vercel":null,"github":null,"canvas":null,"builder":false,"where":"","q":"","v":2}'
     expect(store.get('pr-greenlight:filters:v1:acme/widgets:pulls')).toBe(saved)
     // The server keeps them too, in one PUT for the burst of clicks.
     flushSavedFilters()
@@ -642,6 +638,7 @@ describe('the Pull requests page', () => {
             state: ['draft'],
             needsUpdate: false,
             reviews: null,
+            pending: false,
             authorPoints: false,
             reviewerPoints: false,
             reviewers: null,
@@ -858,7 +855,7 @@ describe('the Pull requests page', () => {
       pull({ number: 2 }),
       pull({ number: 1, canvas: 'Ready', points: { author: 0, reviewer: 0 } }),
     ])
-    const cells = () => [...document.querySelectorAll('#pull-table tr.queue-row')].map(r => r.children[2])
+    const cells = () => [...document.querySelectorAll('#pull-table tr.queue-row')].map(r => r.children[3])
     const counts = () => cells().map(c => c?.textContent)
     expect(counts()).toEqual(['11', '—', '00'])
     expect(
@@ -874,6 +871,59 @@ describe('the Pull requests page', () => {
     expect(counts()).toEqual(['—', '00', '11'])
     header().click()
     expect(counts()).toEqual(['11', '00', '—'])
+  })
+
+  it('shows and sorts by each PR’s pending items, empty before a sync read them', async () => {
+    await loadPulls([
+      pull({ number: 3, pending: 2 }),
+      pull({ number: 2, pending: /** @type {any} */ (undefined) }),
+      pull({ number: 1, pending: 0 }),
+      pull({ number: 4, pending: 1 }),
+    ])
+    const cells = () => [...document.querySelectorAll('#pull-table tr.queue-row')].map(r => r.children[2])
+    const numbers = () => [...document.querySelectorAll('#pull-table .pull-number')].map(n => n.textContent)
+    const byNumber = () =>
+      Object.fromEntries(
+        [...document.querySelectorAll('#pull-table tr.queue-row')].map(r => [
+          r.querySelector('.pull-number')?.textContent,
+          r.children[2],
+        ])
+      )
+    const cell = (/** @type {string} */ n) => byNumber()[n]
+    expect(cell('#3')?.querySelector('.pull-pending .badge')?.className).toBe('badge acc')
+    expect(cell('#3')?.querySelector('.badge')?.getAttribute('title')).toBe('2 pending items')
+    expect(cell('#4')?.querySelector('.badge')?.getAttribute('title')).toBe('1 pending item')
+    expect(cell('#1')?.querySelector('.badge')?.className).toBe('badge muted')
+    expect(cell('#1')?.textContent).toBe('0')
+    // No sync has read #2's activity: its cell is there, and empty.
+    expect(cell('#2')?.querySelector('.pull-pending')?.childElementCount).toBe(0)
+    // Its header explains the number behind a "?".
+    const help = document.querySelector('#pull-table th[data-col="pending"] .help-button')
+    expect(help?.getAttribute('aria-describedby')).toMatch(/^pending-help-/)
+    expect(document.getElementById(String(help?.getAttribute('aria-describedby')))?.textContent).toContain(
+      'Unresolved threads whose latest comment is not yours'
+    )
+    const header = () =>
+      /** @type {HTMLButtonElement} */ (
+        [...document.querySelectorAll('#pull-table .sort-button')].find(b =>
+          b.textContent?.startsWith('Pending')
+        )
+      )
+    header().click()
+    expect(numbers()).toEqual(['#2', '#1', '#4', '#3'])
+    header().click()
+    expect(numbers()).toEqual(['#3', '#4', '#1', '#2'])
+    expect(new URLSearchParams(location.search).getAll('sort')).toEqual(['-pending'])
+    // Only PRs with Pending work keeps those with some.
+    ;/** @type {HTMLInputElement} */ (
+      document.querySelector('#review-filter [data-filter="pending"]')
+    ).click()
+    expect(numbers()).toEqual(['#3', '#4'])
+    expect(document.getElementById('review-filter-label')?.textContent).toBe('All · Pending work')
+    expect(JSON.parse(store.get('pr-greenlight:filters:v1:acme/widgets:pulls') ?? '')).toMatchObject({
+      pending: true,
+    })
+    expect(cells().map(c => c?.textContent)).toEqual(['2', '1'])
   })
 
   it('loads again while a canvas generation is under way, and stops once it ends', async () => {
@@ -933,10 +983,11 @@ describe('the review filter on the Pull requests page', () => {
     const button = /** @type {HTMLElement} */ (document.getElementById('review-filter-button'))
     button.click()
     expect(document.getElementById('review-filter')?.hidden).toBe(false)
-    // Only the attention point flags are left beside the states: canvas and bot reviews are Status's.
+    // Pending work and the attention point flags sit beside the states: canvas and bot reviews are
+    // Status's.
     expect(
       [...document.querySelectorAll('#review-filter [data-filter]')].map(b => b.getAttribute('data-filter'))
-    ).toEqual(['authorPoints', 'reviewerPoints'])
+    ).toEqual(['pending', 'authorPoints', 'reviewerPoints'])
     box('authorPoints').click()
     expect(page.titles()).toEqual(['Canvas one #2'])
     expect(document.getElementById('review-filter-label')?.textContent).toBe('All · Author points')
@@ -1452,9 +1503,18 @@ describe('the Columns picker on Pull requests', () => {
     // CodeRabbit is not read here, so it is neither offered nor shown.
     expect(
       [...document.querySelectorAll('#columns-options input')].map(i => i.getAttribute('data-column'))
-    ).toEqual(['status', 'points', 'review', 'reviewed', 'ready', 'labels', 'canvas'])
-    expect(shownHead()).toEqual(['status', 'points', 'review', 'reviewed', 'ready', 'labels', 'canvas'])
-    expect(page.rows()[0]?.children).toHaveLength(9)
+    ).toEqual(['status', 'pending', 'points', 'review', 'reviewed', 'ready', 'labels', 'canvas'])
+    expect(shownHead()).toEqual([
+      'status',
+      'pending',
+      'points',
+      'review',
+      'reviewed',
+      'ready',
+      'labels',
+      'canvas',
+    ])
+    expect(page.rows()[0]?.children).toHaveLength(10)
     // A hidden column leaves the sort; the others stay in it.
     const sortBy = (/** @type {string} */ name) =>
       /** @type {HTMLButtonElement} */ (
@@ -1466,16 +1526,20 @@ describe('the Columns picker on Pull requests', () => {
     expect(location.search).toBe('?sort=-review&sort=points')
     box('review').click()
     expect(location.search).toBe('?sort=points')
-    expect(shownHead()).toEqual(['status', 'points', 'reviewed', 'ready', 'labels', 'canvas'])
-    expect(page.rows()[0]?.children).toHaveLength(8)
-    expect(document.getElementById('columns-label')?.textContent).toBe('6 of 7')
+    expect(shownHead()).toEqual(['status', 'pending', 'points', 'reviewed', 'ready', 'labels', 'canvas'])
+    expect(page.rows()[0]?.children).toHaveLength(9)
+    expect(document.getElementById('columns-label')?.textContent).toBe('7 of 8')
+    // Without Pending, the row has no Pending cell.
+    box('pending').click()
+    expect(page.rows()[0]?.querySelector('.pull-pending')).toBeNull()
+    box('pending').click()
     document.getElementById('columns-none')?.click()
     expect(shownHead()).toEqual([])
     expect(page.rows()[0]?.children).toHaveLength(2)
     expect(document.getElementById('columns-label')?.textContent).toBe('None')
     document.getElementById('columns-all')?.click()
     expect(page.rows()[0]?.querySelector('.pending-pill')?.textContent).toBe('20')
-    expect(page.rows()[0]?.querySelector('.pull-pending')).toBeNull()
+    expect(page.rows()[0]?.querySelector('.pull-pending')?.textContent).toBe('0')
     expect(document.getElementById('columns-label')?.textContent).toBe('All')
   })
 })

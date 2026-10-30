@@ -61,6 +61,12 @@ export const SERVER = {
       'The first pill is whoever last requested changes, approved, or commented, checked in that order.\n\n' +
       '**Canvas** (comments posted from Canvas) and **Bots** (every bot together) come first only when no person has reviewed.\n\n' +
       '**+N** is everyone else; hover it to see their counts.',
+    pending:
+      '**Left:** unresolved threads, change requests, comments and reviews that name you by your @login since you last wrote.\n\n' +
+      '**Right:** unresolved threads and change requests waiting on the author or other reviewers.\n\n' +
+      'Sorting by Pending sorts by the left number.',
+    pendingYours:
+      'Unresolved threads whose latest comment is not yours, change requests that still stand, comments people left after your last word, and failing or stuck CI and a merge conflict.',
     status:
       'Icons sit side by side when more than one holds; hover one for its details, such as which checks failed or why CI looks stuck.\n\n' +
       'No icon means the PR has no checks, or no sync has read it yet.',

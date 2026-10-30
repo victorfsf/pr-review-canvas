@@ -143,11 +143,16 @@ const reviewParts = (/** @type {string[] | null} */ reviews, queue = false) => {
 }
 
 /**
- * The Reviews filter's attention point flags as blocks.
- * @param {{ authorPoints: boolean, reviewerPoints: boolean }} f
+ * The Reviews filter's flags as blocks: pending work, on the queue work waiting on others, then
+ * the attention points.
+ * @param {{ pending: boolean, waiting?: boolean, authorPoints: boolean, reviewerPoints: boolean }} f
  * @returns {[string, string[] | null][]}
  */
 const pointsParts = f => [
+  ['pending', f.pending ? ['yes'] : null],
+  ...('waiting' in f
+    ? [/** @type {[string, string[] | null]} */ (['waiting', f.waiting ? ['yes'] : null])]
+    : []),
   ['authorPoints', f.authorPoints ? ['yes'] : null],
   ['reviewerPoints', f.reviewerPoints ? ['yes'] : null],
 ]
@@ -206,6 +211,14 @@ export function queueFields({ on, branches, people = [], search }) {
     },
     oneOf('review', 'Review', REVIEW_STATES, reviewState),
     oneOf('requested', 'Your review', REQUEST_CHOICES, row => (row.requested ? 'requested' : 'notRequested')),
+    yesNo('pending', 'Pending work', 'Has pending work', 'Nothing pending', row => (row.pending ?? 0) > 0),
+    yesNo(
+      'waiting',
+      'Waiting on others',
+      'Has work waiting on others',
+      'Nothing waiting on others',
+      row => (row.waiting ?? 0) > 0
+    ),
     ...pointsFields(/** @param {import('./queue.js').QueueRow} row */ row => row.points),
     ...baseField(branches),
     stackField(row => row.stack),
@@ -238,15 +251,23 @@ export function queueSeed(f, { on, bases, stack }) {
  *   stacks: Readonly<Record<number, import('./stack-pick.js').Stacked['stack']>>,
  *   health: Readonly<Record<number, import('./health.js').Health>>,
  *   statuses: Readonly<Record<number, { canvas: string, codeRabbit: string }>>,
+ *   pending: Readonly<Record<number, number>>,
  *   points: Readonly<Record<number, { author: number, reviewer: number }>>, people?: readonly string[],
  *   search?: (pull: import("./pulls.js").Pull, words: string) => boolean }} ctx
  * @returns {Field<import('./pulls.js').Pull>[]}
  */
-export function pullFields({ on, branches, stacks, health, statuses, points, people = [], search }) {
+export function pullFields({ on, branches, stacks, health, statuses, pending, points, people = [], search }) {
   return [
     ...searchField(search),
     stateField(),
     oneOf('review', 'Review', REVIEW_STATES, reviewState),
+    yesNo(
+      'pending',
+      'Pending work',
+      'Has pending work',
+      'Nothing pending',
+      p => (pending[p.number] ?? 0) > 0
+    ),
     ...pointsFields(/** @param {import('./pulls.js').Pull} p */ p => points[p.number]),
     {
       key: 'reviewer',

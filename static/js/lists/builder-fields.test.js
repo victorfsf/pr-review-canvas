@@ -135,6 +135,54 @@ describe('the builder’s fields', () => {
     })
   })
 
+  it('writes Pending work and Work waiting on others into the queue’s blocks, before the points', () => {
+    expect(
+      queueSeed(
+        { ...QUEUE_DEFAULTS, pending: true, waiting: true, authorPoints: true },
+        { on: { codeRabbit: false, vercel: false, canvas: false }, bases: null, stack: '' }
+      )
+    ).toEqual({
+      op: 'and',
+      items: [
+        { field: 'state', is: 'any', values: ['open', 'queued'] },
+        { field: 'pending', is: 'any', values: ['yes'] },
+        { field: 'waiting', is: 'any', values: ['yes'] },
+        { field: 'authorPoints', is: 'any', values: ['yes'] },
+      ],
+    })
+    expect(
+      queueSeed(
+        { ...QUEUE_DEFAULTS, waiting: true },
+        { on: { codeRabbit: false, vercel: false, canvas: false }, bases: null, stack: '' }
+      ).items
+    ).toEqual([
+      { field: 'state', is: 'any', values: ['open', 'queued'] },
+      { field: 'waiting', is: 'any', values: ['yes'] },
+    ])
+  })
+
+  it('offers Pending work and Work waiting on others on the queue, none read counting as none', () => {
+    const rows = [queueRow({ pending: 2, waiting: 0 }), queueRow({ pending: 0, waiting: 1 }), queueRow({})]
+    const fields = queueFields({ on, branches })
+    const keys = fields.map(f => f.key)
+    expect(keys.indexOf('pending')).toBeLessThan(keys.indexOf('waiting'))
+    expect(keys.indexOf('waiting')).toBeLessThan(keys.indexOf('authorPoints'))
+    const pending = field(fields, 'pending')
+    expect(pending.label).toBe('Pending work')
+    expect(pending.options(rows)).toEqual([
+      ['yes', 'Has pending work'],
+      ['no', 'Nothing pending'],
+    ])
+    expect(rows.map(r => pending.values(r))).toEqual([['yes'], ['no'], ['no']])
+    const waiting = field(fields, 'waiting')
+    expect(waiting.label).toBe('Waiting on others')
+    expect(waiting.options(rows)).toEqual([
+      ['yes', 'Has work waiting on others'],
+      ['no', 'Nothing waiting on others'],
+    ])
+    expect(rows.map(r => waiting.values(r))).toEqual([['no'], ['yes'], ['no']])
+  })
+
   it('offers a base once the repo has two, and attention points only where a row has some open', () => {
     const rows = [
       queueRow({
@@ -166,13 +214,17 @@ describe('the builder’s fields', () => {
     expect(reviewerPoints.values(at(rows, 0))).toEqual(['no'])
     expect(reviewerPoints.values(at(rows, 1))).toEqual(['yes'])
     expect(reviewerPoints.values(queueRow({}))).toEqual(['no'])
-    expect(fields.map(f => f.key)).not.toContain('pending')
-    // Both tables have the same two.
-    const pullKeys = pullFields({ on, branches, stacks: {}, health: {}, statuses: {}, points: {} }).map(
-      f => f.key
-    )
-    expect(pullKeys).toEqual(expect.arrayContaining(['authorPoints', 'reviewerPoints']))
-    expect(pullKeys).not.toContain('pending')
+    // Both tables have the same two, and Pending work; only the queue has Work waiting on others.
+    const pullKeys = pullFields({
+      on,
+      branches,
+      stacks: {},
+      health: {},
+      statuses: {},
+      pending: {},
+      points: {},
+    }).map(f => f.key)
+    expect(pullKeys).toEqual(expect.arrayContaining(['pending', 'authorPoints', 'reviewerPoints']))
     expect(pullKeys).not.toContain('waiting')
     expect(field(fields, 'label').values(at(rows, 0))).toEqual(['bug'])
     expect(field(fields, 'label').values(at(rows, 1))).toEqual([NO_LABEL])
@@ -197,6 +249,16 @@ describe('the builder’s fields', () => {
         { field: 'reviewer', is: 'any', values: ['sam'] },
       ],
     })
+    // Pending work, and never Work waiting on others, which Your PRs has not.
+    expect(
+      pullsSeed(
+        { ...PULLS_DEFAULTS, pending: true },
+        { on: { codeRabbit: false, vercel: false, canvas: false }, bases: null, stack: '' }
+      ).items
+    ).toEqual([
+      { field: 'state', is: 'any', values: ['open', 'queued'] },
+      { field: 'pending', is: 'any', values: ['yes'] },
+    ])
     const pulls = [
       pull({ number: 1, baseRefName: 'feature' }),
       pull({ number: 2, labels: ['Bug'], reviewers: [reviewer('sam')] }),
@@ -208,8 +270,13 @@ describe('the builder’s fields', () => {
       stacks: { 1: { name: 'auth', total: 2 }, 3: { name: 'solo', total: 1 } },
       health: { 2: { ci: 'failing', failing: 1, stuck: null, conflict: true } },
       statuses: { 2: { canvas: 'Ready', codeRabbit: 'Outdated' } },
+      pending: { 1: 3, 2: 0 },
       points: { 2: { author: 1, reviewer: 0 } },
     })
+    // Pending work by number; a PR no sync read has none.
+    const pending = field(fields, 'pending')
+    expect(pending.label).toBe('Pending work')
+    expect(pulls.map(p => pending.values(p))).toEqual([['yes'], ['no'], ['no']])
     // The branch a PR targets itself: one into a feature branch is on Other branches, stacked or not.
     const base = field(fields, 'base')
     expect(base.values(at(pulls, 0))).toEqual([OTHER_BASE])

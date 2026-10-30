@@ -1957,6 +1957,10 @@ main.lists {
   text-decoration: underline;
 }
 
+.lists .pull-pending {
+  display: inline-flex;
+}
+
 .lists .pending-pill {
   display: inline-flex;
   align-items: center;

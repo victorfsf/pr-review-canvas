@@ -199,6 +199,29 @@ describe('filterQueue', () => {
     expect([QUEUE_ACCEPT.authorPoints(true), QUEUE_ACCEPT.reviewerPoints('yes')]).toEqual([true, false])
   })
 
+  it('keeps by Pending work and Work waiting on others: each checked needs its count, none read counting as none', () => {
+    const counted = [
+      row({ number: 1, pending: 2, waiting: 0 }),
+      row({ number: 2, pending: 0, waiting: 3 }),
+      row({ number: 3, pending: 1, waiting: 1 }),
+      row({ number: 4, pending: 0, waiting: 0 }),
+      row({ number: 5 }),
+    ]
+    const kept = (/** @type {Partial<typeof QUEUE_DEFAULTS>} */ f) =>
+      filterQueue(counted, { ...QUEUE_DEFAULTS, ...f }, true, true).map(r => r.number)
+    expect(kept({})).toEqual([1, 2, 3, 4, 5])
+    expect(kept({ pending: true })).toEqual([1, 3])
+    expect(kept({ waiting: true })).toEqual([2, 3])
+    expect(kept({ pending: true, waiting: true })).toEqual([3])
+    // With the attention points too, each must hold.
+    expect(kept({ pending: true, authorPoints: true })).toEqual([])
+    expect(isFiltered({ ...QUEUE_DEFAULTS, pending: true })).toBe(true)
+    expect(isFiltered({ ...QUEUE_DEFAULTS, waiting: true })).toBe(true)
+    expect([QUEUE_DEFAULTS.pending, QUEUE_DEFAULTS.waiting]).toEqual([false, false])
+    expect([QUEUE_ACCEPT.pending(true), QUEUE_ACCEPT.pending(1)]).toEqual([true, false])
+    expect([QUEUE_ACCEPT.waiting(false), QUEUE_ACCEPT.waiting('true')]).toEqual([true, false])
+  })
+
   it('moves an old save’s Awaiting your review from the GitHub choices to Reviews', () => {
     expect(upgradeQueue({ github: ['requested', 'failing'] })).toEqual({
       github: ['failing'],
@@ -301,8 +324,16 @@ describe('sortQueue', () => {
     ]
     expect(sortQueue(pointed, ['points']).map(r => r.number)).toEqual([2, 3, 1, 4])
     expect(sortQueue(pointed, ['-points']).map(r => r.number)).toEqual([4, 1, 3, 2])
-    // Pending is no column now, so no sort.
-    expect(QUEUE_ACCEPT.sort(['pending'])).toBe(false)
+    // By what waits on you, the left number; a row no fetch has read sorts below nothing pending.
+    const counted = [
+      row({ number: 1, pending: 2, waiting: 0 }),
+      row({ number: 2 }),
+      row({ number: 3, pending: 0, waiting: 9 }),
+      row({ number: 4, pending: 5 }),
+    ]
+    expect(sortQueue(counted, ['pending']).map(r => r.number)).toEqual([2, 3, 1, 4])
+    expect(sortQueue(counted, ['-pending']).map(r => r.number)).toEqual([4, 1, 3, 2])
+    expect(QUEUE_ACCEPT.sort(['pending', '-points'])).toBe(true)
   })
 
   it('stacks columns, the first deciding first, and keeps ties in their order', () => {

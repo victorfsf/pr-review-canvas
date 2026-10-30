@@ -49,14 +49,48 @@ describe('listsMain', () => {
     const queue = await render({ tab: 'queue', canGenerate: true })
     expect(queue).toContain('data-agent="true"')
     expect(queue).not.toContain('id="generate-missing"')
-    // The Pending column and its legend are gone.
-    expect(queue).not.toContain('pending-help')
     expect(queue).toContain('id="builder-chat-toggle"')
     expect(queue).not.toMatch(/id="queue-priority"[^>]*hidden/)
     const pulls = await render({ canGenerate: true })
     expect(pulls).toContain('id="builder-chat-toggle"')
     expect(pulls).not.toContain('id="generate-missing"')
-    expect(pulls).not.toContain('pending-help')
+  })
+
+  it('explains the Pending numbers behind a "?" on each tab, the queue’s two and Your PRs’ one', async () => {
+    const queue = await render({ tab: 'queue' })
+    expect(queue).toContain('<template id="pending-help">')
+    expect(queue).toContain('aria-describedby="pending-help-queue"')
+    expect(queue).toContain('id="pending-help-queue" role="tooltip"')
+    expect(queue).toContain('<strong>Left:</strong>')
+    expect(queue).toContain('<strong>Right:</strong>')
+    expect(queue).toContain('Sorting by Pending sorts by the left number.')
+    expect(queue).not.toContain('pending-help-pulls')
+    const pulls = await render()
+    expect(pulls).toContain('<template id="pending-help">')
+    expect(pulls).toContain('aria-describedby="pending-help-pulls"')
+    expect(pulls).toContain('Unresolved threads whose latest comment is not yours')
+    expect(pulls).not.toContain('<strong>Left:</strong>')
+    expect(pulls).not.toContain('pending-help-queue')
+  })
+
+  it('lists Pending work, and on the queue Work waiting on others, before the attention points', async () => {
+    const boxes = (page: string) =>
+      [...page.matchAll(/data-filter="(\w+)"> ([^<]+)<\/label>/g)].map(m => [m[1], m[2]])
+    const flags = (page: string) =>
+      boxes(page).filter(([key]) =>
+        ['pending', 'waiting', 'authorPoints', 'reviewerPoints'].includes(key ?? '')
+      )
+    expect(flags(await render({ tab: 'queue' }))).toEqual([
+      ['pending', 'Pending work'],
+      ['waiting', 'Work waiting on others'],
+      ['authorPoints', 'Author attention points'],
+      ['reviewerPoints', 'Reviewer attention points'],
+    ])
+    expect(flags(await render())).toEqual([
+      ['pending', 'Pending work'],
+      ['authorPoints', 'Author attention points'],
+      ['reviewerPoints', 'Reviewer attention points'],
+    ])
   })
 })
 

@@ -51,6 +51,7 @@ export const CODERABBIT_STATUSES = /** @type {const} */ (['Ready', 'Outdated', '
 export const SORTS = /** @type {const} */ ([
   'pr',
   'status',
+  'pending',
   'points',
   'author',
   'ready',
@@ -77,6 +78,8 @@ export const QUEUE_DEFAULTS = {
   labels: ALL,
   /** The Reviews filter's choices, review states and whether a PR awaits you, then its flags. */
   reviews: ALL,
+  pending: false,
+  waiting: false,
   authorPoints: false,
   reviewerPoints: false,
   /** The base branches whose PRs stay (see bases.js). */
@@ -111,6 +114,8 @@ export const QUEUE_ACCEPT = {
   authors: isStrings,
   labels: isStrings,
   reviews: v => within(reviewChoices(true).map(([key]) => key))(v),
+  pending: isBool,
+  waiting: isBool,
   authorPoints: isBool,
   reviewerPoints: isBool,
   bases: isStrings,
@@ -148,6 +153,8 @@ export function isFiltered(f) {
     f.authors !== null ||
     f.labels !== null ||
     f.reviews !== null ||
+    f.pending ||
+    f.waiting ||
     f.authorPoints ||
     f.reviewerPoints ||
     f.needsUpdate ||
@@ -177,7 +184,12 @@ export function filterQueue(rows, f, codeRabbit, vercel = true, canvas = true) {
       ticked(f.authors, r.author) &&
       (labels === null ||
         (r.labels.length === 0 ? labels.has(NO_LABEL) : r.labels.some(l => labels.has(l.toLowerCase())))) &&
-      keepsReviews(r, f, { points: r.points, queue: true }) &&
+      keepsReviews(r, f, {
+        pending: r.pending ?? 0,
+        waiting: r.waiting ?? 0,
+        points: r.points,
+        queue: true,
+      }) &&
       (!f.needsUpdate || r.restack === true || r.update !== undefined) &&
       matchesIntegrations(r, f, { codeRabbit, vercel, canvas })
   )
@@ -190,6 +202,8 @@ const text = (/** @type {string} */ a, /** @type {string} */ b) =>
 const COMPARE = {
   pr: (a, b) => a.number - b.number,
   status: (a, b) => healthRank(a.health) - healthRank(b.health),
+  // A row whose activity no fetch has read yet sorts before one with nothing pending.
+  pending: (a, b) => (a.pending ?? -1) - (b.pending ?? -1),
   // A row whose canvas is not here sorts before one with no open point.
   points: (a, b) => openTotal(a.points) - openTotal(b.points),
   author: (a, b) => text(a.author, b.author),

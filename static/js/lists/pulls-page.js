@@ -83,13 +83,13 @@ import { reviewRequests } from './review-requests.js'
  * @param {{ stack: { name: string, position: number, total: number } | undefined,
  *   health: import('./health.js').Health | undefined,
  *   statuses: { canvas: keyof typeof STATUS_TONE, codeRabbit: keyof typeof STATUS_TONE } | undefined,
- *   shows: (column: string) => boolean,
+ *   pending: number | undefined, shows: (column: string) => boolean,
  *   pickStack: (stack: string) => void, now: number,
  *   generation: import('./canvas-cell.js').RowGeneration | undefined,
  *   points: import('./canvas-cell.js').OpenPoints | undefined,
  *   reviewers: (pr: number) => HTMLElement,
  *   foundBy: readonly string[], slim: { view: import('./pr-table.js').RowView, span: number } | null }} info
- *   where it sits in its stack; its
+ *   where it sits in its stack; how many pending items it has (none before a sync read it); its
  *   checks and conflicts for Status; its canvas status; and which columns show (see
  *   columns.js); how to keep the list to a stack; the keys alone the search found it by; and
  *   slim, its arrow and the cells its open part spans
@@ -157,9 +157,17 @@ function pullRow(doc, pull, branches, info) {
   const status = (/** @type {keyof typeof STATUS_TONE | undefined} */ value) =>
     value === undefined ? el(doc, 'span') : el(doc, 'span', `badge ${STATUS_TONE[value]}`, value)
 
+  // How many pending items it has; none to show before a sync read it.
+  const pending = el(doc, 'span', 'pull-pending')
+  if (info.pending !== undefined) {
+    const count = el(doc, 'span', `badge ${info.pending > 0 ? 'acc' : 'muted'}`, String(info.pending))
+    count.title = TEXTS.lists.pulls.pendingItems(info.pending)
+    pending.append(count)
+  }
   /** @type {Record<(typeof PULL_COLUMNS)[number][0], () => HTMLElement>} */
   const cells = {
     status: () => healthNode(doc, health),
+    pending: () => pending,
     points: () => pointsCell(doc, info.points),
     review: () => review,
     reviewed: () => reviewersNode(doc, pull.reviewers),
@@ -218,6 +226,9 @@ export function wirePullsPage(doc) {
   const canvas = true
   /** @type {Record<number, { canvas: keyof typeof STATUS_TONE, codeRabbit: keyof typeof STATUS_TONE }>} */
   let statuses = {}
+  /** Each PR's pending items, by number. */
+  /** @type {Record<number, number>} */
+  let pending = {}
   /** Each PR's open attention points, for the author and the reviewer, by number; none with no canvas. */
   /** @type {Record<number, import('./canvas-cell.js').OpenPoints>} */
   let points = {}
@@ -285,7 +296,7 @@ export function wirePullsPage(doc) {
       label,
       columns: shown,
       // Status says what its icons are, and Reviewed by its marks, behind a "?" each.
-      help: { status: 'status-help', reviewed: 'reviewed-by-help' },
+      help: { status: 'status-help', pending: 'pending-help', reviewed: 'reviewed-by-help' },
       sort: { sort: filters.sort, onSort: setSort, sortable: () => true },
       groups,
       folds,
@@ -362,7 +373,7 @@ export function wirePullsPage(doc) {
       return filterStack(
         builder.keep(all) ??
           filterBases(
-            filterPulls(all, each, health, statuses, on, points),
+            filterPulls(all, each, health, statuses, on, points, pending),
             f.bases,
             branches,
             p => stacks[p.number]
@@ -410,7 +421,7 @@ export function wirePullsPage(doc) {
     })
     const shown = whole
       ? byStackPosition(filtered, p => stacks[p.number])
-      : sortBy(filtered, filters.sort, pullCompare(health, statuses, points))
+      : sortBy(filtered, filters.sort, pullCompare(health, statuses, pending, points))
     /** @param {import('./pulls.js').Pull} p */
     const info = p => ({
       reviewers: (/** @type {number} */ pr) => requests.button(pr),
@@ -420,6 +431,7 @@ export function wirePullsPage(doc) {
       shows: columns.shows,
       pickStack,
       generation: generations[p.number],
+      pending: pending[p.number],
       points: points[p.number],
       now: asOf(sync.syncedAt, loadedAt),
       foundBy: foundBy.get(p.number) ?? [],
@@ -493,7 +505,7 @@ export function wirePullsPage(doc) {
       const data = await api('lists/pulls')
       loadedAt = Date.now()
       /** @type {(import('./pulls.js').Pull & { health: import('./health.js').Health,
-       *   canvas: keyof typeof STATUS_TONE,
+       *   canvas: keyof typeof STATUS_TONE, pending: number,
        *   stack?: { name: string, position: number, total: number, base?: string },
        *   points?: import('./canvas-cell.js').OpenPoints, generation?: import('./canvas-cell.js').RowGeneration })[]} */
       const rows = data.rows
@@ -503,6 +515,7 @@ export function wirePullsPage(doc) {
       statuses = Object.fromEntries(
         rows.map(r => [r.number, { canvas: r.canvas, codeRabbit: /** @type {const} */ ('Pending') }])
       )
+      pending = Object.fromEntries(rows.map(r => [r.number, r.pending]))
       points = Object.fromEntries(rows.flatMap(r => (r.points === undefined ? [] : [[r.number, r.points]])))
       generations = Object.fromEntries(
         rows.flatMap(r => (r.generation === undefined ? [] : [[r.number, r.generation]]))
@@ -583,6 +596,7 @@ export function wirePullsPage(doc) {
         stacks,
         health,
         statuses,
+        pending,
         points,
         people,
         search: (p, words) => searchMatch(searchable(p), parseSearch(words), jiraOn) !== null,

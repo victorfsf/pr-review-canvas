@@ -34,7 +34,9 @@ export const LISTS = {
     openQueue: 'Open merge queue',
     openQueueFor: (/** @type {string} */ time) => `Open merge queue: in it for ${time}`,
   },
-  pulls: {},
+  pulls: {
+    pendingItems: (/** @type {number} */ n) => `${n} pending ${n === 1 ? 'item' : 'items'}`,
+  },
 
   /** The rows of Your PRs and the Review queue (pr-table.js): slim or whole, and opening them. */
   rows: {
@@ -54,6 +56,8 @@ export const LISTS = {
 
   /** The Review queue: its rows' pending counts, its Labels filter, its notices. */
   queue: {
+    waitingOnYou: (/** @type {number} */ n) => `${n} waiting on you`,
+    waitingOnOthers: (/** @type {number} */ n) => `${n} waiting on others`,
     noLabels: 'No labels match.',
     fetchFailed: (/** @type {string} */ error) => `The review queue could not be fetched: ${error}`,
     noLongerWaits: (/** @type {number | string} */ pr) => `#${pr} no longer waits for your review.`,

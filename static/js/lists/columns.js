@@ -9,6 +9,7 @@ import { loadColumns, saveColumns } from './filters.js'
 /** Your PRs' columns that can hide, in table order. */
 export const PULL_COLUMNS = /** @type {const} */ ([
   ['status', 'Status'],
+  ['pending', 'Pending'],
   ['points', 'Attention points'],
   ['review', 'Review'],
   ['reviewed', 'Reviewed by'],
@@ -21,6 +22,7 @@ export const PULL_COLUMNS = /** @type {const} */ ([
 /** The Review queue's columns that can hide, in table order. */
 export const QUEUE_COLUMNS = /** @type {const} */ ([
   ['status', 'Status'],
+  ['pending', 'Pending'],
   ['points', 'Attention points'],
   ['reviewed', 'Reviewed by'],
   ['author', 'Author'],
